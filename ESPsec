@@ -1,15 +1,15 @@
 -- Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Teams = game:GetService("Teams")
+_G.Players = game:GetService("Players")
+_G.RunService = game:GetService("RunService")
+_G.Teams = game:GetService("Teams")
 
 -- Validate critical objects
-local LocalPlayer = Players.LocalPlayer
+_G.LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
     return
 end
 
-local Camera = workspace.CurrentCamera
+_G.Camera = workspace.CurrentCamera
 if not Camera then
     return
 end
@@ -20,14 +20,14 @@ if not ESPTab then
 end
 
 -- Create ESP sections
-local secesp = ESPTab:AddSection("ESP", 1)
-local seccustomesp = ESPTab:AddSection("Customise ESP", 2)
+_G.secesp = ESPTab:AddSection("ESP", 1)
+_G.seccustomesp = ESPTab:AddSection("Customise ESP", 2)
 
 -- Store references to all UI elements and ESP objects
-local ESPObjects = {}
+_G.ESPObjects = {}
 
 -- Store current settings values with defaults
-local ESPSettings = {
+_G.ESPSettings = {
     BoxThickness = 2,
     TextSize = 15,
     AllyColor = Color3.fromRGB(96, 205, 255),
@@ -46,7 +46,7 @@ local ESPSettings = {
 }
 
 -- Track health bar animation states
-local HealthBarStates = {}
+_G.HealthBarStates = {}
 
 -- Setup Main ESP section
 secesp:AddSeparator({
@@ -55,7 +55,7 @@ secesp:AddSeparator({
 })
 
 -- Main ESP Toggle
-local ShowESP = secesp:AddToggle({
+_G.ShowESP = secesp:AddToggle({
     text = "Enable ESP",
     state = false,
     tooltip = "Master switch for ESP features",
@@ -75,49 +75,49 @@ ShowESP:AddBind({
 })
 
 -- ESP Features Toggles
-local ESPBox = secesp:AddToggle({
+_G.ESPBox = secesp:AddToggle({
     text = "Show Box",
     state = false,
     tooltip = "Show box around players",
     flag = "ESPBox"
 })
 
-local ShowHealthBar = secesp:AddToggle({
+_G.ShowHealthBar = secesp:AddToggle({
     text = "Show Health Bar",
     state = false,
     tooltip = "Show health bar next to players",
     flag = "ShowHealthBar"
 })
 
-local ShowDistance = secesp:AddToggle({
+_G.ShowDistance = secesp:AddToggle({
     text = "Show Distance",
     state = false,
     tooltip = "Show distance to players",
     flag = "ShowDistance"
 })
 
-local ShowNames = secesp:AddToggle({
+_G.ShowNames = secesp:AddToggle({
     text = "Show Names",
     state = false,
     tooltip = "Show player names",
     flag = "ShowNames"
 })
 
-local ShowVisibility = secesp:AddToggle({
+_G.ShowVisibility = secesp:AddToggle({
     text = "Show Visibility",
     state = false,
     tooltip = "Show if players are visible",
     flag = "ShowVisibility"
 })
 
-local ShowSkeleton = secesp:AddToggle({
+_G.ShowSkeleton = secesp:AddToggle({
     text = "Show Skeleton",
     state = false,
     tooltip = "Show player skeleton",
     flag = "ShowSkeleton"
 })
 
-local ShowTracers = secesp:AddToggle({
+_G.ShowTracers = secesp:AddToggle({
     text = "Show Tracers",
     state = false,
     tooltip = "Show lines to players",
@@ -125,7 +125,7 @@ local ShowTracers = secesp:AddToggle({
 })
 
 -- Store all ESP toggles in a table
-local ESPToggles = {
+_G.ESPToggles = {
     Distance = secesp:AddToggle({
         text = "Show Distance",
         state = false,
@@ -168,7 +168,7 @@ secesp:AddSeparator({
 })
 
 -- Team ESP Settings stored in table
-local TeamSettings = {
+_G.TeamSettings = {
     TeamCheck = secesp:AddToggle({
         text = "Only Show Enemies",
         state = false,
@@ -185,8 +185,8 @@ local TeamSettings = {
 }
 
 -- Function to get all teams in the game
-local function getTeamNames(): {string}
-    local teamNames = {}
+_G.function getTeamNames(): {string}
+    _G.teamNames = {}
     for _, team in ipairs(Teams:GetTeams()) do
         if team.Name and team.Name ~= "Neutral" then
             table.insert(teamNames, team.Name)
@@ -196,7 +196,7 @@ local function getTeamNames(): {string}
 end
 
 -- -- Team Blacklist
--- local TeamBlacklist = secesp:AddList({
+-- _G.TeamBlacklist = secesp:AddList({
 --     text = "Team Blacklist",
 --     tooltip = "Select teams to hide from ESP",
 --     items = getTeamNames(),
@@ -226,7 +226,7 @@ seccustomesp:AddSeparator({
 })
 
 -- Team color settings
-local AllyColor = seccustomesp:AddColor({
+_G.AllyColor = seccustomesp:AddColor({
     enabled = true,
     text = "Ally Color",
     tooltip = "Set the color for teammates",
@@ -239,7 +239,7 @@ local AllyColor = seccustomesp:AddColor({
     end
 })
 
-local EnemyColor = seccustomesp:AddColor({
+_G.EnemyColor = seccustomesp:AddColor({
     enabled = true,
     text = "Enemy Color",
     tooltip = "Set the color for enemies",
@@ -252,7 +252,7 @@ local EnemyColor = seccustomesp:AddColor({
     end
 })
 
-local SkeletonColor = seccustomesp:AddColor({
+_G.SkeletonColor = seccustomesp:AddColor({
     enabled = true,
     text = "Skeleton Color",
     tooltip = "Set the color for skeleton lines",
@@ -265,7 +265,7 @@ local SkeletonColor = seccustomesp:AddColor({
     end
 })
 
-local TracerColor = seccustomesp:AddColor({
+_G.TracerColor = seccustomesp:AddColor({
     enabled = true,
     text = "Tracer Color",
     tooltip = "Set the color for tracer lines",
@@ -284,7 +284,7 @@ seccustomesp:AddSeparator({
 })
 
 -- Box Thickness Slider
-local BoxThickness = seccustomesp:AddSlider({
+_G.BoxThickness = seccustomesp:AddSlider({
     text = "Box Thickness",
     min = 1,
     max = 5,
@@ -304,7 +304,7 @@ local BoxThickness = seccustomesp:AddSlider({
 })
 
 -- Text Size Slider
-local TextSize = seccustomesp:AddSlider({
+_G.TextSize = seccustomesp:AddSlider({
     text = "Text Size",
     min = 10,
     max = 24,
@@ -324,7 +324,7 @@ local TextSize = seccustomesp:AddSlider({
 })
 
 -- Health Bar Width Slider
-local HealthBarWidth = seccustomesp:AddSlider({
+_G.HealthBarWidth = seccustomesp:AddSlider({
     text = "Health Bar Width",
     min = 2,
     max = 8,
@@ -339,7 +339,7 @@ local HealthBarWidth = seccustomesp:AddSlider({
 })
 
 -- Health Bar Offset Slider
-local HealthBarOffset = seccustomesp:AddSlider({
+_G.HealthBarOffset = seccustomesp:AddSlider({
     text = "Health Bar Offset",
     min = 0,
     max = 10,
@@ -354,7 +354,7 @@ local HealthBarOffset = seccustomesp:AddSlider({
 })
 
 -- Skeleton Thickness Slider
-local SkeletonThickness = seccustomesp:AddSlider({
+_G.SkeletonThickness = seccustomesp:AddSlider({
     text = "Skeleton Thickness",
     min = 1,
     max = 4,
@@ -374,7 +374,7 @@ local SkeletonThickness = seccustomesp:AddSlider({
 })
 
 -- Tracer Thickness Slider
-local TracerThickness = seccustomesp:AddSlider({
+_G.TracerThickness = seccustomesp:AddSlider({
     text = "Tracer Thickness",
     min = 1,
     max = 4,
@@ -394,7 +394,7 @@ local TracerThickness = seccustomesp:AddSlider({
 })
 
 -- Name Text Offset Slider
-local NameTextOffset = seccustomesp:AddSlider({
+_G.NameTextOffset = seccustomesp:AddSlider({
     text = "Name Text Offset",
     min = 0,
     max = 30,
@@ -409,7 +409,7 @@ local NameTextOffset = seccustomesp:AddSlider({
 })
 
 -- Distance Text Offset Slider
-local DistanceTextOffset = seccustomesp:AddSlider({
+_G.DistanceTextOffset = seccustomesp:AddSlider({
     text = "Distance Text Offset",
     min = 0,
     max = 20,
@@ -424,7 +424,7 @@ local DistanceTextOffset = seccustomesp:AddSlider({
 })
 
 -- Visibility Text Offset Slider
-local VisibilityTextOffset = seccustomesp:AddSlider({
+_G.VisibilityTextOffset = seccustomesp:AddSlider({
     text = "Visibility Text Offset",
     min = 0,
     max = 20,
@@ -439,7 +439,7 @@ local VisibilityTextOffset = seccustomesp:AddSlider({
 })
 
 -- ESP Scale Slider
-local ESPScale = seccustomesp:AddSlider({
+_G.ESPScale = seccustomesp:AddSlider({
     text = "ESP Scale",
     min = 50,
     max = 150,
@@ -454,12 +454,12 @@ local ESPScale = seccustomesp:AddSlider({
 })
 
 -- Create ESP for a player
-local function createESP(player: Player)
+_G.function createESP(player: Player)
     if player == LocalPlayer or ESPObjects[player] or not player:IsA("Player") then
         return
     end
     
-    local success, data = pcall(function()
+    _G.success, data = pcall(function()
         return {
             Box = Drawing.new("Square"),
             Distance = Drawing.new("Text"),
@@ -537,8 +537,8 @@ local function createESP(player: Player)
 end
 
 -- Remove ESP for a player
-local function removeESP(player: Player)
-    local data = ESPObjects[player]
+_G.function removeESP(player: Player)
+    _G.data = ESPObjects[player]
     if not data then
         return
     end
@@ -559,27 +559,27 @@ local function removeESP(player: Player)
 end
 
 -- Check if player is visible
-local function isPlayerVisible(character: Model?): boolean
+_G.function isPlayerVisible(character: Model?): boolean
     if not LocalPlayer.Character or not character then
         return false
     end
     
-    local localHead = LocalPlayer.Character:FindFirstChild("Head")
-    local targetHead = character:FindFirstChild("Head")
+    _G.localHead = LocalPlayer.Character:FindFirstChild("Head")
+    _G.targetHead = character:FindFirstChild("Head")
     
     if not localHead or not targetHead then
         return false
     end
     
-    local ray = Ray.new(localHead.Position, (targetHead.Position - localHead.Position).Unit * 1000)
-    local ignoreList = {LocalPlayer.Character}
-    local hitPart = workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+    _G.ray = Ray.new(localHead.Position, (targetHead.Position - localHead.Position).Unit * 1000)
+    _G.ignoreList = {LocalPlayer.Character}
+    _G.hitPart = workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
     
     return hitPart and hitPart:IsDescendantOf(character)
 end
 
 -- Update all ESP settings
-local function updateAllESPSettings()
+_G.function updateAllESPSettings()
     for _, data in pairs(ESPObjects) do
         if data.Box then
             data.Box.Thickness = ESPSettings.BoxThickness
@@ -631,9 +631,9 @@ RunService.RenderStepped:Connect(function(delta: number)
     end
 
     for player, data in pairs(ESPObjects) do
-        local character = player.Character
-        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-        local humanoid = character and character:FindFirstChild("Humanoid")
+        _G.character = player.Character
+        _G.hrp = character and character:FindFirstChild("HumanoidRootPart")
+        _G.humanoid = character and character:FindFirstChild("Humanoid")
 
         if not (player:IsA("Player") and character and hrp and humanoid and humanoid.Health > 0) then
             for key, obj in pairs(data) do
@@ -680,13 +680,13 @@ RunService.RenderStepped:Connect(function(delta: number)
             continue
         end
 
-        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-        local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
-        local scale = math.clamp(1 / (distance / 50), 0.5, 2) * ESPSettings.ESPScale
-        local boxW, boxH = 50 * scale, 100 * scale
-        local boxX, boxY = pos.X - boxW / 2, pos.Y - boxH / 2
+        _G.pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+        _G.distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+        _G.scale = math.clamp(1 / (distance / 50), 0.5, 2) * ESPSettings.ESPScale
+        _G.boxW, boxH = 50 * scale, 100 * scale
+        _G.boxX, boxY = pos.X - boxW / 2, pos.Y - boxH / 2
 
-        local color
+        _G.color
         if ESPTeamColor.state and player.Team then
             color = player.Team.TeamColor.Color
         elseif player.Team == LocalPlayer.Team and LocalPlayer.Team then
@@ -706,9 +706,9 @@ RunService.RenderStepped:Connect(function(delta: number)
         end
 
         if ShowHealthBar.state and data.HealthOutline and data.HealthBar then
-            local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-            local barWidth = ESPSettings.HealthBarWidth
-            local state = HealthBarStates[player]
+            _G.healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+            _G.barWidth = ESPSettings.HealthBarWidth
+            _G.state = HealthBarStates[player]
             state.CurrentHeight = state.CurrentHeight + (healthRatio - state.CurrentHeight) * math.min(10 * delta, 1)
             
             data.HealthOutline.Position = Vector2.new(boxX - barWidth - ESPSettings.HealthBarOffset, boxY)
@@ -745,10 +745,10 @@ RunService.RenderStepped:Connect(function(delta: number)
         end
         
         if ShowVisibility.state and data.Visibility then
-            local isVisible = isPlayerVisible(character)
-            local visText = isVisible and "Visible" or "Hidden"
-            local visColor = isVisible and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-            local yOffset = ShowDistance.state and ESPSettings.DistanceTextOffset + ESPSettings.TextSize + ESPSettings.VisibilityTextOffset or ESPSettings.VisibilityTextOffset
+            _G.isVisible = isPlayerVisible(character)
+            _G.visText = isVisible and "Visible" or "Hidden"
+            _G.visColor = isVisible and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+            _G.yOffset = ShowDistance.state and ESPSettings.DistanceTextOffset + ESPSettings.TextSize + ESPSettings.VisibilityTextOffset or ESPSettings.VisibilityTextOffset
             
             data.Visibility.Text = visText
             data.Visibility.Position = Vector2.new(pos.X, boxY + boxH + yOffset)
@@ -760,7 +760,7 @@ RunService.RenderStepped:Connect(function(delta: number)
         end
 
         if ShowSkeleton.state and data.Skeleton then
-            local bodyParts = {
+            _G.bodyParts = {
                 Head = character:FindFirstChild("Head"),
                 UpperTorso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"),
                 LeftUpperArm = character:FindFirstChild("LeftUpperArm"),
@@ -770,8 +770,8 @@ RunService.RenderStepped:Connect(function(delta: number)
             }
 
             if bodyParts.Head and bodyParts.UpperTorso then
-                local headPos = Camera:WorldToViewportPoint(bodyParts.Head.Position)
-                local torsoPos = Camera:WorldToViewportPoint(bodyParts.UpperTorso.Position)
+                _G.headPos = Camera:WorldToViewportPoint(bodyParts.Head.Position)
+                _G.torsoPos = Camera:WorldToViewportPoint(bodyParts.UpperTorso.Position)
                 
                 data.Skeleton.HeadTorso.From = Vector2.new(headPos.X, headPos.Y)
                 data.Skeleton.HeadTorso.To = Vector2.new(torsoPos.X, torsoPos.Y)
@@ -779,7 +779,7 @@ RunService.RenderStepped:Connect(function(delta: number)
                 data.Skeleton.HeadTorso.Visible = onScreen
 
                 if bodyParts.LeftUpperArm then
-                    local armPos = Camera:WorldToViewportPoint(bodyParts.LeftUpperArm.Position)
+                    _G.armPos = Camera:WorldToViewportPoint(bodyParts.LeftUpperArm.Position)
                     data.Skeleton.TorsoLeftArm.From = Vector2.new(torsoPos.X, torsoPos.Y)
                     data.Skeleton.TorsoLeftArm.To = Vector2.new(armPos.X, armPos.Y)
                     data.Skeleton.TorsoLeftArm.Color = ESPSettings.SkeletonColor
@@ -789,7 +789,7 @@ RunService.RenderStepped:Connect(function(delta: number)
                 end
 
                 if bodyParts.RightUpperArm then
-                    local armPos = Camera:WorldToViewportPoint(bodyParts.RightUpperArm.Position)
+                    _G.armPos = Camera:WorldToViewportPoint(bodyParts.RightUpperArm.Position)
                     data.Skeleton.TorsoRightArm.From = Vector2.new(torsoPos.X, torsoPos.Y)
                     data.Skeleton.TorsoRightArm.To = Vector2.new(armPos.X, armPos.Y)
                     data.Skeleton.TorsoRightArm.Color = ESPSettings.SkeletonColor
@@ -799,7 +799,7 @@ RunService.RenderStepped:Connect(function(delta: number)
                 end
 
                 if bodyParts.LeftLowerLeg then
-                    local legPos = Camera:WorldToViewportPoint(bodyParts.LeftLowerLeg.Position)
+                    _G.legPos = Camera:WorldToViewportPoint(bodyParts.LeftLowerLeg.Position)
                     data.Skeleton.TorsoLeftLeg.From = Vector2.new(torsoPos.X, torsoPos.Y)
                     data.Skeleton.TorsoLeftLeg.To = Vector2.new(legPos.X, legPos.Y)
                     data.Skeleton.TorsoLeftLeg.Color = ESPSettings.SkeletonColor
@@ -809,7 +809,7 @@ RunService.RenderStepped:Connect(function(delta: number)
                 end
 
                 if bodyParts.RightLowerLeg then
-                    local legPos = Camera:WorldToViewportPoint(bodyParts.RightLowerLeg.Position)
+                    _G.legPos = Camera:WorldToViewportPoint(bodyParts.RightLowerLeg.Position)
                     data.Skeleton.TorsoRightLeg.From = Vector2.new(torsoPos.X, torsoPos.Y)
                     data.Skeleton.TorsoRightLeg.To = Vector2.new(legPos.X, legPos.Y)
                     data.Skeleton.TorsoRightLeg.Color = ESPSettings.SkeletonColor
@@ -829,7 +829,7 @@ RunService.RenderStepped:Connect(function(delta: number)
         end
 
         if ShowTracers.state and data.Tracer then
-            local screenBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+            _G.screenBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
             data.Tracer.From = screenBottom
             data.Tracer.To = Vector2.new(pos.X, pos.Y)
             data.Tracer.Color = ESPSettings.TracerColor
