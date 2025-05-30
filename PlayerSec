@@ -1,5 +1,5 @@
 -- Player Section
-local secplayer = PlayerTab:AddSection("Player", 1)
+local secplayer = _G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G.PlayerTab:AddSection("Player", 1)
 secplayer:AddSeparator({ enabled = true, text = "Player" })
 
 -- Service References
@@ -778,8 +778,8 @@ secplayer:AddToggle({
 })
 
 -- Cleanup on unload
-if PlayerTab.AddCleanup then
-    PlayerTab:AddCleanup(cleanupStats)
+if _G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G.PlayerTab.AddCleanup then
+    _G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G.PlayerTab:AddCleanup(cleanupStats)
 end
 
 -- Store helper functions
@@ -804,7 +804,7 @@ local character = player.Character
 local humanoid = character and character:WaitForChild("Humanoid", 5)
 
 -- Character Customization Section
-local seccharacter = PlayerTab:AddSection("Character Customization", 2)
+local seccharacter = _G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G._G.PlayerTab:AddSection("Character Customization", 2)
 seccharacter:AddSeparator({ enabled = true, text = "Character Effects" })
 
 -- State for character effects
