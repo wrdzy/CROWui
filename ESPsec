@@ -20,9 +20,30 @@ if not _G.ESPTab then
     return
 end
 
+-- Debug ESPTab
+if not _G.ESPTab.AddSection or typeof(_G.ESPTab.AddSection) ~= "function" then
+    warn("ESPTab:AddSection is not a valid method. Check CROW UI library compatibility.")
+    return
+end
+
 -- Create ESP sections
 _G.SecESP = _G.ESPTab:AddSection("ESP", 1)
+if not _G.SecESP then
+    warn("Failed to create ESP section. AddSection returned nil.")
+    return
+end
+
 _G.SecCustomESP = _G.ESPTab:AddSection("Customise ESP", 2)
+if not _G.SecCustomESP then
+    warn("Failed to create Customise ESP section. AddSection returned nil.")
+    return
+end
+
+-- Validate AddToggle method
+if not _G.SecESP.AddToggle or typeof(_G.SecESP.AddToggle) ~= "function" then
+    warn("SecESP:AddToggle is not a valid method. Check CROW UI library implementation.")
+    return
+end
 
 -- Store references to all UI elements and ESP objects
 _G.ESPObjects = {}
