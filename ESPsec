@@ -1,55 +1,64 @@
 -- Services
-_G.Players = game:GetService("Players")
-_G.RunService = game:GetService("RunService")
-_G.Teams = game:GetService("Teams")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Teams = game:GetService("Teams")
 
 -- Validate critical objects
-_G.LocalPlayer = _G.Players.LocalPlayer
-if not _G.LocalPlayer then
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    warn("LocalPlayer not found.")
+    _G.CROW:SendNotification("ESP Error: LocalPlayer not found.", 5)
     return
 end
 
-_G.Camera = workspace.CurrentCamera
-if not _G.Camera then
+local Camera = workspace.CurrentCamera
+if not Camera then
+    warn("Camera not found.")
+    _G.CROW:SendNotification("ESP Error: Camera not found.", 5)
     return
 end
 
 -- Validate ESPTab
 if not _G.ESPTab then
     warn("ESPTab not found. Ensure CROW UI is properly initialized.")
+    _G.CROW:SendNotification("ESP Error: ESPTab not found.", 5)
     return
 end
 
--- Debug ESPTab
+-- Validate AddSection method
 if not _G.ESPTab.AddSection or typeof(_G.ESPTab.AddSection) ~= "function" then
-    warn("ESPTab:AddSection is not a valid method. Check CROW UI library compatibility.")
+    warn("ESPTab:AddSection is not a valid method.")
+    _G.CROW:SendNotification("ESP Error: ESPTab:AddSection is not valid.", 5)
     return
 end
 
 -- Create ESP sections
-_G.SecESP = _G.ESPTab:AddSection("ESP", 1)
-if not _G.SecESP then
-    warn("Failed to create ESP section. AddSection returned nil.")
+local SecESP = _G.ESPTab:AddSection("ESP", 1)
+if not SecESP then
+    warn("Failed to create ESP section.")
+    _G.CROW:SendNotification("ESP Error: Failed to create ESP section.", 5)
     return
 end
 
-_G.SecCustomESP = _G.ESPTab:AddSection("Customise ESP", 2)
-if not _G.SecCustomESP then
-    warn("Failed to create Customise ESP section. AddSection returned nil.")
+local SecCustomESP = _G.ESPTab:AddSection("Customise ESP", 2)
+if not SecCustomESP then
+    warn("Failed to create Customise ESP section.")
+    _G.CROW:SendNotification("ESP Error: Failed to create Customise ESP section.", 5)
     return
 end
 
 -- Validate AddToggle method
-if not _G.SecESP.AddToggle or typeof(_G.SecESP.AddToggle) ~= "function" then
-    warn("SecESP:AddToggle is not a valid method. Check CROW UI library implementation.")
+if not SecESP.AddToggle or typeof(SecESP.AddToggle) ~= "function" then
+    warn("SecESP:AddToggle is not a valid method.")
+    _G.CROW:SendNotification("ESP Error: SecESP:AddToggle is not valid.", 5)
     return
 end
 
 -- Store references to all UI elements and ESP objects
-_G.ESPObjects = {}
+local ESPObjects = {}
 
 -- Store current settings values with defaults
-_G.ESPSettings = {
+local ESPSettings = {
     BoxThickness = 2,
     TextSize = 15,
     AllyColor = Color3.fromRGB(96, 205, 255),
@@ -67,23 +76,23 @@ _G.ESPSettings = {
 }
 
 -- Track health bar animation states
-_G.HealthBarStates = {}
+local HealthBarStates = {}
 
 -- Setup Main ESP section
-_G.SecESP:AddSeparator({
+SecESP:AddSeparator({
     enabled = true,
     text = "Main"
 })
 
 -- Main ESP Toggle
-_G.ShowESP = _G.SecESP:AddToggle({
+local ShowESP = SecESP:AddToggle({
     text = "Enable ESP",
     state = false,
     tooltip = "Master switch for ESP features",
     flag = "ShowESP"
 })
 
-_G.ShowESP:AddBind({
+ShowESP:AddBind({
     enabled = true,
     text = "Toggle ESP",
     tooltip = "Hotkey to toggle ESP",
@@ -91,54 +100,54 @@ _G.ShowESP:AddBind({
     bind = "NONE",
     flag = "ESPToggleKey",
     callback = function(state)
-        _G.ShowESP.state = state
+        ShowESP.state = state
     end
 })
 
 -- ESP Features Toggles
-_G.ESPBox = _G.SecESP:AddToggle({
+local ESPBox = SecESP:AddToggle({
     text = "Show Box",
     state = false,
     tooltip = "Show box around players",
     flag = "ESPBox"
 })
 
-_G.ShowHealthBar = _G.SecESP:AddToggle({
+local ShowHealthBar = SecESP:AddToggle({
     text = "Show Health Bar",
     state = false,
     tooltip = "Show health bar next to players",
     flag = "ShowHealthBar"
 })
 
-_G.ShowDistance = _G.SecESP:AddToggle({
+local ShowDistance = SecESP:AddToggle({
     text = "Show Distance",
     state = false,
     tooltip = "Show distance to players",
     flag = "ShowDistance"
 })
 
-_G.ShowNames = _G.SecESP:AddToggle({
+local ShowNames = SecESP:AddToggle({
     text = "Show Names",
     state = false,
     tooltip = "Show player names",
     flag = "ShowNames"
 })
 
-_G.ShowVisibility = _G.SecESP:AddToggle({
+local ShowVisibility = SecESP:AddToggle({
     text = "Show Visibility",
     state = false,
     tooltip = "Show if players are visible",
     flag = "ShowVisibility"
 })
 
-_G.ShowSkeleton = _G.SecESP:AddToggle({
+local ShowSkeleton = SecESP:AddToggle({
     text = "Show Skeleton",
     state = false,
     tooltip = "Show player skeleton",
     flag = "ShowSkeleton"
 })
 
-_G.ShowTracers = _G.SecESP:AddToggle({
+local ShowTracers = SecESP:AddToggle({
     text = "Show Tracers",
     state = false,
     tooltip = "Show lines to players",
@@ -146,28 +155,28 @@ _G.ShowTracers = _G.SecESP:AddToggle({
 })
 
 -- Store all ESP toggles in a table
-_G.ESPToggles = {
-    Distance = _G.ShowDistance,
-    Names = _G.ShowNames,
-    Visibility = _G.ShowVisibility,
-    Skeleton = _G.ShowSkeleton,
-    Tracers = _G.ShowTracers
+local ESPToggles = {
+    Distance = ShowDistance,
+    Names = ShowNames,
+    Visibility = ShowVisibility,
+    Skeleton = ShowSkeleton,
+    Tracers = ShowTracers
 }
 
-_G.SecESP:AddSeparator({
+SecESP:AddSeparator({
     enabled = true,
     text = "Team Settings"
 })
 
 -- Team ESP Settings stored in table
-_G.TeamSettings = {
-    TeamCheck = _G.SecESP:AddToggle({
+local TeamSettings = {
+    TeamCheck = SecESP:AddToggle({
         text = "Only Show Enemies",
         state = false,
         tooltip = "Only show ESP for enemy players",
         flag = "ESPTeamCheck"
     }),
-    TeamColor = _G.SecESP:AddToggle({
+    TeamColor = SecESP:AddToggle({
         text = "Use Team Colors",
         state = false,
         tooltip = "Use team colors for ESP",
@@ -176,81 +185,81 @@ _G.TeamSettings = {
 }
 
 -- Function to get all teams in the game
-_G.GetTeamNames = function()
-    _G.TeamNames = {}
-    for _, team in ipairs(_G.Teams:GetTeams()) do
+local function GetTeamNames()
+    local TeamNames = {}
+    for _, team in ipairs(Teams:GetTeams()) do
         if team.Name and team.Name ~= "Neutral" then
-            table.insert(_G.TeamNames, team.Name)
+            table.insert(TeamNames, team.Name)
         end
     end
-    return _G.TeamNames
+    return TeamNames
 end
 
-_G.SecCustomESP:AddSeparator({
+SecCustomESP:AddSeparator({
     enabled = true,
     text = "Colors"
 })
 
 -- Team color settings
-_G.AllyColor = _G.SecCustomESP:AddColor({
+local AllyColor = SecCustomESP:AddColor({
     enabled = true,
     text = "Ally Color",
     tooltip = "Set the color for teammates",
-    color = _G.ESPSettings.AllyColor,
+    color = ESPSettings.AllyColor,
     flag = "AllyColor",
     trans = 0,
     open = false,
     callback = function(color)
-        _G.ESPSettings.AllyColor = color or _G.ESPSettings.AllyColor
+        ESPSettings.AllyColor = color or ESPSettings.AllyColor
     end
 })
 
-_G.EnemyColor = _G.SecCustomESP:AddColor({
+local EnemyColor = SecCustomESP:AddColor({
     enabled = true,
     text = "Enemy Color",
     tooltip = "Set the color for enemies",
-    color = _G.ESPSettings.EnemyColor,
+    color = ESPSettings.EnemyColor,
     flag = "EnemyColor",
     trans = 0,
     open = false,
     callback = function(color)
-        _G.ESPSettings.EnemyColor = color or _G.ESPSettings.EnemyColor
+        ESPSettings.EnemyColor = color or ESPSettings.EnemyColor
     end
 })
 
-_G.SkeletonColor = _G.SecCustomESP:AddColor({
+local SkeletonColor = SecCustomESP:AddColor({
     enabled = true,
     text = "Skeleton Color",
     tooltip = "Set the color for skeleton lines",
-    color = _G.ESPSettings.SkeletonColor,
+    color = ESPSettings.SkeletonColor,
     flag = "SkeletonColor",
     trans = 0,
     open = false,
     callback = function(color)
-        _G.ESPSettings.SkeletonColor = color or _G.ESPSettings.SkeletonColor
+        ESPSettings.SkeletonColor = color or ESPSettings.SkeletonColor
     end
 })
 
-_G.TracerColor = _G.SecCustomESP:AddColor({
+local TracerColor = SecCustomESP:AddColor({
     enabled = true,
     text = "Tracer Color",
     tooltip = "Set the color for tracer lines",
-    color = _G.ESPSettings.TracerColor,
+    color = ESPSettings.TracerColor,
     flag = "TracerColor",
     trans = 0,
     open = false,
     callback = function(color)
-        _G.ESPSettings.TracerColor = color or _G.ESPSettings.TracerColor
+        ESPSettings.TracerColor = color or ESPSettings.TracerColor
     end
 })
 
-_G.SecCustomESP:AddSeparator({
+SecCustomESP:AddSeparator({
     enabled = true,
     text = "Size Settings"
 })
 
 -- Box Thickness Slider
-_G.BoxThickness = _G.SecCustomESP:AddSlider({
+local BoxThickness = SecCustomESP:AddSlider({
     text = "Box Thickness",
     min = 1,
     max = 5,
@@ -260,13 +269,13 @@ _G.BoxThickness = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the thickness of ESP boxes",
     flag = "BoxThickness",
     callback = function(value)
-        _G.ESPSettings.BoxThickness = value or 2
-        _G.UpdateAllESPSettings()
+        ESPSettings.BoxThickness = value or 2
+        UpdateAllESPSettings()
     end
 })
 
 -- Text Size Slider
-_G.TextSize = _G.SecCustomESP:AddSlider({
+local TextSize = SecCustomESP:AddSlider({
     text = "Text Size",
     min = 10,
     max = 24,
@@ -276,13 +285,13 @@ _G.TextSize = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the size of ESP text",
     flag = "TextSize",
     callback = function(value)
-        _G.ESPSettings.TextSize = value or 15
-        _G.UpdateAllESPSettings()
+        ESPSettings.TextSize = value or 15
+        UpdateAllESPSettings()
     end
 })
 
 -- Health Bar Width Slider
-_G.HealthBarWidth = _G.SecCustomESP:AddSlider({
+local HealthBarWidth = SecCustomESP:AddSlider({
     text = "Health Bar Width",
     min = 2,
     max = 8,
@@ -292,13 +301,13 @@ _G.HealthBarWidth = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the width of health bars",
     flag = "HealthBarWidth",
     callback = function(value)
-        _G.ESPSettings.HealthBarWidth = value or 4
-        _G.UpdateAllESPSettings()
+        ESPSettings.HealthBarWidth = value or 4
+        UpdateAllESPSettings()
     end
 })
 
 -- Health Bar Offset Slider
-_G.HealthBarOffset = _G.SecCustomESP:AddSlider({
+local HealthBarOffset = SecCustomESP:AddSlider({
     text = "Health Bar Offset",
     min = 0,
     max = 10,
@@ -308,13 +317,13 @@ _G.HealthBarOffset = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the distance of health bar from box",
     flag = "HealthBarOffset",
     callback = function(value)
-        _G.ESPSettings.HealthBarOffset = value or 2
-        _G.UpdateAllESPSettings()
+        ESPSettings.HealthBarOffset = value or 2
+        UpdateAllESPSettings()
     end
 })
 
 -- Skeleton Thickness Slider
-_G.SkeletonThickness = _G.SecCustomESP:AddSlider({
+local SkeletonThickness = SecCustomESP:AddSlider({
     text = "Skeleton Thickness",
     min = 1,
     max = 4,
@@ -324,13 +333,13 @@ _G.SkeletonThickness = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the thickness of skeleton lines",
     flag = "SkeletonThickness",
     callback = function(value)
-        _G.ESPSettings.SkeletonThickness = value or 1
-        _G.UpdateAllESPSettings()
+        ESPSettings.SkeletonThickness = value or 1
+        UpdateAllESPSettings()
     end
 })
 
 -- Tracer Thickness Slider
-_G.TracerThickness = _G.SecCustomESP:AddSlider({
+local TracerThickness = SecCustomESP:AddSlider({
     text = "Tracer Thickness",
     min = 1,
     max = 4,
@@ -340,13 +349,13 @@ _G.TracerThickness = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the thickness of tracer lines",
     flag = "TracerThickness",
     callback = function(value)
-        _G.ESPSettings.TracerThickness = value or 1
-        _G.UpdateAllESPSettings()
+        ESPSettings.TracerThickness = value or 1
+        UpdateAllESPSettings()
     end
 })
 
 -- Name Text Offset Slider
-_G.NameTextOffset = _G.SecCustomESP:AddSlider({
+local NameTextOffset = SecCustomESP:AddSlider({
     text = "Name Text Offset",
     min = 0,
     max = 30,
@@ -356,13 +365,13 @@ _G.NameTextOffset = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the distance of name text above box",
     flag = "NameTextOffset",
     callback = function(value)
-        _G.ESPSettings.NameTextOffset = value or 16
-        _G.UpdateAllESPSettings()
+        ESPSettings.NameTextOffset = value or 16
+        UpdateAllESPSettings()
     end
 })
 
 -- Distance Text Offset Slider
-_G.DistanceTextOffset = _G.SecCustomESP:AddSlider({
+local DistanceTextOffset = SecCustomESP:AddSlider({
     text = "Distance Text Offset",
     min = 0,
     max = 20,
@@ -372,13 +381,13 @@ _G.DistanceTextOffset = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the distance of distance text below box",
     flag = "DistanceTextOffset",
     callback = function(value)
-        _G.ESPSettings.DistanceTextOffset = value or 2
-        _G.UpdateAllESPSettings()
+        ESPSettings.DistanceTextOffset = value or 2
+        UpdateAllESPSettings()
     end
 })
 
 -- Visibility Text Offset Slider
-_G.VisibilityTextOffset = _G.SecCustomESP:AddSlider({
+local VisibilityTextOffset = SecCustomESP:AddSlider({
     text = "Visibility Text Offset",
     min = 0,
     max = 20,
@@ -388,13 +397,13 @@ _G.VisibilityTextOffset = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the distance of visibility text below box",
     flag = "VisibilityTextOffset",
     callback = function(value)
-        _G.ESPSettings.VisibilityTextOffset = value or 2
-        _G.UpdateAllESPSettings()
+        ESPSettings.VisibilityTextOffset = value or 2
+        UpdateAllESPSettings()
     end
 })
 
 -- ESP Scale Slider
-_G.ESPScale = _G.SecCustomESP:AddSlider({
+local ESPScale = SecCustomESP:AddSlider({
     text = "ESP Scale",
     min = 50,
     max = 150,
@@ -404,18 +413,18 @@ _G.ESPScale = _G.SecCustomESP:AddSlider({
     tooltip = "Adjust the overall scale of ESP elements",
     flag = "ESPScale",
     callback = function(value)
-        _G.ESPSettings.ESPScale = (value or 100) / 100
-        _G.UpdateAllESPSettings()
+        ESPSettings.ESPScale = (value or 100) / 100
+        UpdateAllESPSettings()
     end
 })
 
 -- Create ESP for a player
-_G.CreateESP = function(player)
-    if player == _G.LocalPlayer or _G.ESPObjects[player] or not player:IsA("Player") then
+local function CreateESP(player)
+    if player == LocalPlayer or ESPObjects[player] or not player:IsA("Player") then
         return
     end
     
-    _G.Success, _G.Data = pcall(function()
+    local success, Data = pcall(function()
         return {
             Box = Drawing.new("Square"),
             Distance = Drawing.new("Text"),
@@ -434,73 +443,74 @@ _G.CreateESP = function(player)
         }
     end)
     
-    if not _G.Success then
+    if not success then
         warn("Failed to create ESP objects for player: " .. tostring(player))
+        _G.CROW:SendNotification("ESP Error: Failed to create ESP objects for " .. tostring(player), 5)
         return
     end
     
     -- Initialize ESP box
-    _G.Data.Box.Thickness = _G.ESPSettings.BoxThickness
-    _G.Data.Box.Filled = false
-    _G.Data.Box.Visible = false
+    Data.Box.Thickness = ESPSettings.BoxThickness
+    Data.Box.Filled = false
+    Data.Box.Visible = false
     
     -- Initialize distance text
-    _G.Data.Distance.Size = _G.ESPSettings.TextSize
-    _G.Data.Distance.Center = true
-    _G.Data.Distance.Outline = true
-    _G.Data.Distance.OutlineColor = Color3.new(0, 0, 0)
-    _G.Data.Distance.Font = Drawing.Fonts.UI
-    _G.Data.Distance.Visible = false
+    Data.Distance.Size = ESPSettings.TextSize
+    Data.Distance.Center = true
+    Data.Distance.Outline = true
+    Data.Distance.OutlineColor = Color3.new(0, 0, 0)
+    Data.Distance.Font = Drawing.Fonts.UI
+    Data.Distance.Visible = false
     
     -- Initialize health bar
-    _G.Data.HealthOutline.Thickness = 1
-    _G.Data.HealthOutline.Filled = true
-    _G.Data.HealthOutline.Color = Color3.new(0, 0, 0)
-    _G.Data.HealthOutline.Visible = false
+    Data.HealthOutline.Thickness = 1
+    Data.HealthOutline.Filled = true
+    Data.HealthOutline.Color = Color3.new(0, 0, 0)
+    Data.HealthOutline.Visible = false
     
-    _G.Data.HealthBar.Thickness = 1
-    _G.Data.HealthBar.Filled = true
-    _G.Data.HealthBar.Color = Color3.new(0, 1, 0)
-    _G.Data.HealthBar.Visible = false
+    Data.HealthBar.Thickness = 1
+    Data.HealthBar.Filled = true
+    Data.HealthBar.Color = Color3.new(0, 1, 0)
+    Data.HealthBar.Visible = false
     
     -- Initialize name
-    _G.Data.Name.Size = _G.ESPSettings.TextSize
-    _G.Data.Name.Center = true
-    _G.Data.Name.Outline = true
-    _G.Data.Name.OutlineColor = Color3.new(0, 0, 0)
-    _G.Data.Name.Font = Drawing.Fonts.UI
-    _G.Data.Name.Visible = false
+    Data.Name.Size = ESPSettings.TextSize
+    Data.Name.Center = true
+    Data.Name.Outline = true
+    Data.Name.OutlineColor = Color3.new(0, 0, 0)
+    Data.Name.Font = Drawing.Fonts.UI
+    Data.Name.Visible = false
     
     -- Initialize visibility text
-    _G.Data.Visibility.Size = _G.ESPSettings.TextSize
-    _G.Data.Visibility.Center = true
-    _G.Data.Visibility.Outline = true
-    _G.Data.Visibility.OutlineColor = Color3.new(0, 0, 0)
-    _G.Data.Visibility.Font = Drawing.Fonts.UI
-    _G.Data.Visibility.Visible = false
+    Data.Visibility.Size = ESPSettings.TextSize
+    Data.Visibility.Center = true
+    Data.Visibility.Outline = true
+    Data.Visibility.OutlineColor = Color3.new(0, 0, 0)
+    Data.Visibility.Font = Drawing.Fonts.UI
+    Data.Visibility.Visible = false
     
     -- Initialize tracer
-    _G.Data.Tracer.Thickness = _G.ESPSettings.TracerThickness
-    _G.Data.Tracer.Visible = false
+    Data.Tracer.Thickness = ESPSettings.TracerThickness
+    Data.Tracer.Visible = false
     
     -- Initialize skeleton
-    for _, line in pairs(_G.Data.Skeleton) do
-        line.Thickness = _G.ESPSettings.SkeletonThickness
+    for _, line in pairs(Data.Skeleton) do
+        line.Thickness = ESPSettings.SkeletonThickness
         line.Visible = false
     end
     
-    _G.ESPObjects[player] = _G.Data
-    _G.HealthBarStates[player] = { CurrentHeight = 0 }
+    ESPObjects[player] = Data
+    HealthBarStates[player] = { CurrentHeight = 0 }
 end
 
 -- Remove ESP for a player
-_G.RemoveESP = function(player)
-    _G.Data = _G.ESPObjects[player]
-    if not _G.Data then
+local function RemoveESP(player)
+    local Data = ESPObjects[player]
+    if not Data then
         return
     end
     
-    for _, obj in pairs(_G.Data) do
+    for _, obj in pairs(Data) do
         if type(obj) == "table" then
             for _, line in pairs(obj) do
                 if line and line.Remove then
@@ -511,70 +521,70 @@ _G.RemoveESP = function(player)
             obj:Remove()
         end
     end
-    _G.ESPObjects[player] = nil
-    _G.HealthBarStates[player] = nil
+    ESPObjects[player] = nil
+    HealthBarStates[player] = nil
 end
 
 -- Check if player is visible
-_G.IsPlayerVisible = function(character)
-    if not _G.LocalPlayer.Character or not character then
+local function IsPlayerVisible(character)
+    if not LocalPlayer.Character or not character then
         return false
     end
     
-    _G.LocalHead = _G.LocalPlayer.Character:FindFirstChild("Head")
-    _G.TargetHead = character:FindFirstChild("Head")
+    local LocalHead = LocalPlayer.Character:FindFirstChild("Head")
+    local TargetHead = character:FindFirstChild("Head")
     
-    if not _G.LocalHead or not _G.TargetHead then
+    if not LocalHead or not TargetHead then
         return false
     end
     
-    _G.Ray = Ray.new(_G.LocalHead.Position, (_G.TargetHead.Position - _G.LocalHead.Position).Unit * 1000)
-    _G.IgnoreList = {_G.LocalPlayer.Character}
-    _G.HitPart = workspace:FindPartOnRayWithIgnoreList(_G.Ray, _G.IgnoreList)
+    local Ray = Ray.new(LocalHead.Position, (TargetHead.Position - LocalHead.Position).Unit * 1000)
+    local IgnoreList = {LocalPlayer.Character}
+    local HitPart = workspace:FindPartOnRayWithIgnoreList(Ray, IgnoreList)
     
-    return _G.HitPart and _G.HitPart:IsDescendantOf(character)
+    return HitPart and HitPart:IsDescendantOf(character)
 end
 
 -- Update all ESP settings
-_G.UpdateAllESPSettings = function()
-    for _, data in pairs(_G.ESPObjects) do
+function UpdateAllESPSettings()
+    for _, data in pairs(ESPObjects) do
         if data.Box then
-            data.Box.Thickness = _G.ESPSettings.BoxThickness
+            data.Box.Thickness = ESPSettings.BoxThickness
         end
         if data.Distance then
-            data.Distance.Size = _G.ESPSettings.TextSize
+            data.Distance.Size = ESPSettings.TextSize
         end
         if data.Name then
-            data.Name.Size = _G.ESPSettings.TextSize
+            data.Name.Size = ESPSettings.TextSize
         end
         if data.Visibility then
-            data.Visibility.Size = _G.ESPSettings.TextSize
+            data.Visibility.Size = ESPSettings.TextSize
         end
         if data.Tracer then
-            data.Tracer.Thickness = _G.ESPSettings.TracerThickness
+            data.Tracer.Thickness = ESPSettings.TracerThickness
         end
         for _, line in pairs(data.Skeleton or {}) do
-            line.Thickness = _G.ESPSettings.SkeletonThickness
+            line.Thickness = ESPSettings.SkeletonThickness
         end
     end
 end
 
 -- Create ESP for existing players
-for _, player in ipairs(_G.Players:GetPlayers()) do
-    _G.CreateESP(player)
+for _, player in ipairs(Players:GetPlayers()) do
+    CreateESP(player)
 end
 
 -- Handle player joining and leaving
-_G.Players.PlayerAdded:Connect(_G.CreateESP)
-_G.Players.PlayerRemoving:Connect(_G.RemoveESP)
+Players.PlayerAdded:Connect(CreateESP)
+Players.PlayerRemoving:Connect(RemoveESP)
 
 -- ESP rendering logic with visibility check throttling
-_G.LastVisibilityCheck = 0
-_G.VisibilityCheckInterval = 0.5 -- Check visibility every 0.5 seconds
+local LastVisibilityCheck = 0
+local VisibilityCheckInterval = 0.5 -- Check visibility every 0.5 seconds
 
-_G.RunService.RenderStepped:Connect(function(delta)
-    if not _G.ShowESP.state then
-        for _, data in pairs(_G.ESPObjects) do
+RunService.RenderStepped:Connect(function(delta)
+    if not ShowESP.state then
+        for _, data in pairs(ESPObjects) do
             for _, obj in pairs(data) do
                 if type(obj) == "table" then
                     for _, line in pairs(obj) do
@@ -590,15 +600,15 @@ _G.RunService.RenderStepped:Connect(function(delta)
         return
     end
 
-    _G.CurrentTime = tick()
-    _G.ShouldCheckVisibility = _G.CurrentTime - _G.LastVisibilityCheck >= _G.VisibilityCheckInterval
+    local CurrentTime = tick()
+    local ShouldCheckVisibility = CurrentTime - LastVisibilityCheck >= VisibilityCheckInterval
 
-    for player, data in pairs(_G.ESPObjects) do
-        _G.Character = player.Character
-        _G.HRP = _G.Character and _G.Character:FindFirstChild("HumanoidRootPart")
-        _G.Humanoid = _G.Character and _G.Character:FindFirstChild("Humanoid")
+    for player, data in pairs(ESPObjects) do
+        local Character = player.Character
+        local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
+        local Humanoid = Character and Character:FindFirstChild("Humanoid")
 
-        if not (player:IsA("Player") and _G.Character and _G.HRP and _G.Humanoid and _G.Humanoid.Health > 0) then
+        if not (player:IsA("Player") and Character and HRP and Humanoid and Humanoid.Health > 0) then
             for _, obj in pairs(data) do
                 if type(obj) == "table" then
                     for _, line in pairs(obj) do
@@ -613,7 +623,7 @@ _G.RunService.RenderStepped:Connect(function(delta)
             continue
         end
         
-        if _G.TeamSettings.TeamCheck.state and player.Team == _G.LocalPlayer.Team and _G.LocalPlayer.Team then
+        if TeamSettings.TeamCheck.state and player.Team == LocalPlayer.Team and LocalPlayer.Team then
             for _, obj in pairs(data) do
                 if type(obj) == "table" then
                     for _, line in pairs(obj) do
@@ -628,134 +638,134 @@ _G.RunService.RenderStepped:Connect(function(delta)
             continue
         end
 
-        _G.Pos, _G.OnScreen = _G.Camera:WorldToViewportPoint(_G.HRP.Position)
-        _G.Distance = (_G.Camera.CFrame.Position - _G.HRP.Position).Magnitude
-        _G.Scale = math.clamp(1 / (_G.Distance / 50), 0.5, 2) * _G.ESPSettings.ESPScale
-        _G.BoxW, _G.BoxH = 50 * _G.Scale, 100 * _G.Scale
-        _G.BoxX, _G.BoxY = _G.Pos.X - _G.BoxW / 2, _G.Pos.Y - _G.BoxH / 2
+        local Pos, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
+        local Distance = (Camera.CFrame.Position - HRP.Position).Magnitude
+        local Scale = math.clamp(1 / (Distance / 50), 0.5, 2) * ESPSettings.ESPScale
+        local BoxW, BoxH = 50 * Scale, 100 * Scale
+        local BoxX, BoxY = Pos.X - BoxW / 2, Pos.Y - BoxH / 2
 
-        _G.Color = _G.TeamSettings.TeamColor.state and player.Team and player.Team.TeamColor.Color or
-                   (player.Team == _G.LocalPlayer.Team and _G.LocalPlayer.Team and _G.ESPSettings.AllyColor or _G.ESPSettings.EnemyColor)
+        local Color = TeamSettings.TeamColor.state and player.Team and player.Team.TeamColor.Color or
+                      (player.Team == LocalPlayer.Team and LocalPlayer.Team and ESPSettings.AllyColor or ESPSettings.EnemyColor)
 
-        if _G.ESPBox.state and data.Box then
-            data.Box.Position = Vector2.new(_G.BoxX, _G.BoxY)
-            data.Box.Size = Vector2.new(_G.BoxW, _G.BoxH)
-            data.Box.Color = _G.Color
-            data.Box.Thickness = _G.ESPSettings.BoxThickness
-            data.Box.Visible = _G.OnScreen
+        if ESPBox.state and data.Box then
+            data.Box.Position = Vector2.new(BoxX, BoxY)
+            data.Box.Size = Vector2.new(BoxW, BoxH)
+            data.Box.Color = Color
+            data.Box.Thickness = ESPSettings.BoxThickness
+            data.Box.Visible = OnScreen
         elseif data.Box then
             data.Box.Visible = false
         end
 
-        if _G.ShowHealthBar.state and data.HealthOutline and data.HealthBar then
-            _G.HealthRatio = math.clamp(_G.Humanoid.Health / _G.Humanoid.MaxHealth, 0, 1)
-            _G.BarWidth = _G.ESPSettings.HealthBarWidth
-            _G.State = _G.HealthBarStates[player]
-            _G.State.CurrentHeight = _G.State.CurrentHeight + (_G.HealthRatio - _G.State.CurrentHeight) * math.min(10 * delta, 1)
+        if ShowHealthBar.state and data.HealthOutline and data.HealthBar then
+            local HealthRatio = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
+            local BarWidth = ESPSettings.HealthBarWidth
+            local State = HealthBarStates[player]
+            State.CurrentHeight = State.CurrentHeight + (HealthRatio - State.CurrentHeight) * math.min(10 * delta, 1)
             
-            data.HealthOutline.Position = Vector2.new(_G.BoxX - _G.BarWidth - _G.ESPSettings.HealthBarOffset, _G.BoxY)
-            data.HealthOutline.Size = Vector2.new(_G.BarWidth, _G.BoxH)
-            data.HealthOutline.Visible = _G.OnScreen
+            data.HealthOutline.Position = Vector2.new(BoxX - BarWidth - ESPSettings.HealthBarOffset, BoxY)
+            data.HealthOutline.Size = Vector2.new(BarWidth, BoxH)
+            data.HealthOutline.Visible = OnScreen
 
-            data.HealthBar.Position = Vector2.new(_G.BoxX - _G.BarWidth - _G.ESPSettings.HealthBarOffset, _G.BoxY + (1 - _G.State.CurrentHeight) * _G.BoxH)
-            data.HealthBar.Size = Vector2.new(_G.BarWidth, _G.BoxH * _G.State.CurrentHeight)
-            data.HealthBar.Color = Color3.fromRGB(255 * (1 - _G.State.CurrentHeight), 255 * _G.State.CurrentHeight, 0)
-            data.HealthBar.Visible = _G.OnScreen
+            data.HealthBar.Position = Vector2.new(BoxX - BarWidth - ESPSettings.HealthBarOffset, BoxY + (1 - State.CurrentHeight) * BoxH)
+            data.HealthBar.Size = Vector2.new(BarWidth, BoxH * State.CurrentHeight)
+            data.HealthBar.Color = Color3.fromRGB(255 * (1 - State.CurrentHeight), 255 * State.CurrentHeight, 0)
+            data.HealthBar.Visible = OnScreen
         else
             if data.HealthBar then data.HealthBar.Visible = false end
             if data.HealthOutline then data.HealthOutline.Visible = false end
         end
 
-        if _G.ShowDistance.state and data.Distance then
-            data.Distance.Text = math.floor(_G.Distance) .. "m"
-            data.Distance.Position = Vector2.new(_G.Pos.X, _G.BoxY + _G.BoxH + _G.ESPSettings.DistanceTextOffset)
-            data.Distance.Color = _G.Color
-            data.Distance.Size = _G.ESPSettings.TextSize
-            data.Distance.Visible = _G.OnScreen
+        if ShowDistance.state and data.Distance then
+            data.Distance.Text = math.floor(Distance) .. "m"
+            data.Distance.Position = Vector2.new(Pos.X, BoxY + BoxH + ESPSettings.DistanceTextOffset)
+            data.Distance.Color = Color
+            data.Distance.Size = ESPSettings.TextSize
+            data.Distance.Visible = OnScreen
         elseif data.Distance then
             data.Distance.Visible = false
         end
         
-        if _G.ShowNames.state and data.Name then
+        if ShowNames.state and data.Name then
             data.Name.Text = player.Name
-            data.Name.Position = Vector2.new(_G.Pos.X, _G.BoxY - _G.ESPSettings.NameTextOffset)
-            data.Name.Color = _G.Color
-            data.Name.Size = _G.ESPSettings.TextSize
-            data.Name.Visible = _G.OnScreen
+            data.Name.Position = Vector2.new(Pos.X, BoxY - ESPSettings.NameTextOffset)
+            data.Name.Color = Color
+            data.Name.Size = ESPSettings.TextSize
+            data.Name.Visible = OnScreen
         elseif data.Name then
             data.Name.Visible = false
         end
         
-        if _G.ShowVisibility.state and data.Visibility then
-            _G.IsVisible = _G.ShouldCheckVisibility and _G.IsPlayerVisible(_G.Character) or data.Visibility.Text == "Visible"
-            _G.VisText = _G.IsVisible and "Visible" or "Hidden"
-            _G.VisColor = _G.IsVisible and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-            _G.YOffset = _G.ShowDistance.state and (_G.ESPSettings.DistanceTextOffset + _G.ESPSettings.TextSize + _G.ESPSettings.VisibilityTextOffset) or _G.ESPSettings.VisibilityTextOffset
+        if ShowVisibility.state and data.Visibility then
+            local IsVisible = ShouldCheckVisibility and IsPlayerVisible(Character) or data.Visibility.Text == "Visible"
+            local VisText = IsVisible and "Visible" or "Hidden"
+            local VisColor = IsVisible and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+            local YOffset = ShowDistance.state and (ESPSettings.DistanceTextOffset + ESPSettings.TextSize + ESPSettings.VisibilityTextOffset) or ESPSettings.VisibilityTextOffset
             
-            data.Visibility.Text = _G.VisText
-            data.Visibility.Position = Vector2.new(_G.Pos.X, _G.BoxY + _G.BoxH + _G.YOffset)
-            data.Visibility.Color = _G.VisColor
-            data.Visibility.Size = _G.ESPSettings.TextSize
-            data.Visibility.Visible = _G.OnScreen
+            data.Visibility.Text = VisText
+            data.Visibility.Position = Vector2.new(Pos.X, BoxY + BoxH + YOffset)
+            data.Visibility.Color = VisColor
+            data.Visibility.Size = ESPSettings.TextSize
+            data.Visibility.Visible = OnScreen
         elseif data.Visibility then
             data.Visibility.Visible = false
         end
 
-        if _G.ShowSkeleton.state and data.Skeleton then
-            _G.BodyParts = {
-                Head = _G.Character:FindFirstChild("Head"),
-                UpperTorso = _G.Character:FindFirstChild("UpperTorso") or _G.Character:FindFirstChild("Torso"),
-                LeftUpperArm = _G.Character:FindFirstChild("LeftUpperArm"),
-                RightUpperArm = _G.Character:FindFirstChild("RightUpperArm"),
-                LeftLowerLeg = _G.Character:FindFirstChild("LeftLowerLeg"),
-                RightLowerLeg = _G.Character:FindFirstChild("RightLowerLeg")
+        if ShowSkeleton.state and data.Skeleton then
+            local BodyParts = {
+                Head = Character:FindFirstChild("Head"),
+                UpperTorso = Character:FindFirstChild("UpperTorso") or Character:FindFirstChild("Torso"),
+                LeftUpperArm = Character:FindFirstChild("LeftUpperArm"),
+                RightUpperArm = Character:FindFirstChild("RightUpperArm"),
+                LeftLowerLeg = Character:FindFirstChild("LeftLowerLeg"),
+                RightLowerLeg = Character:FindFirstChild("RightLowerLeg")
             }
 
-            if _G.BodyParts.Head and _G.BodyParts.UpperTorso then
-                _G.HeadPos = _G.Camera:WorldToViewportPoint(_G.BodyParts.Head.Position)
-                _G.TorsoPos = _G.Camera:WorldToViewportPoint(_G.BodyParts.UpperTorso.Position)
+            if BodyParts.Head and BodyParts.UpperTorso then
+                local HeadPos = Camera:WorldToViewportPoint(BodyParts.Head.Position)
+                local TorsoPos = Camera:WorldToViewportPoint(BodyParts.UpperTorso.Position)
                 
-                data.Skeleton.HeadTorso.From = Vector2.new(_G.HeadPos.X, _G.HeadPos.Y)
-                data.Skeleton.HeadTorso.To = Vector2.new(_G.TorsoPos.X, _G.TorsoPos.Y)
-                data.Skeleton.HeadTorso.Color = _G.ESPSettings.SkeletonColor
-                data.Skeleton.HeadTorso.Visible = _G.OnScreen
+                data.Skeleton.HeadTorso.From = Vector2.new(HeadPos.X, HeadPos.Y)
+                data.Skeleton.HeadTorso.To = Vector2.new(TorsoPos.X, TorsoPos.Y)
+                data.Skeleton.HeadTorso.Color = ESPSettings.SkeletonColor
+                data.Skeleton.HeadTorso.Visible = OnScreen
 
-                if _G.BodyParts.LeftUpperArm then
-                    _G.ArmPos = _G.Camera:WorldToViewportPoint(_G.BodyParts.LeftUpperArm.Position)
-                    data.Skeleton.TorsoLeftArm.From = Vector2.new(_G.TorsoPos.X, _G.TorsoPos.Y)
-                    data.Skeleton.TorsoLeftArm.To = Vector2.new(_G.ArmPos.X, _G.ArmPos.Y)
-                    data.Skeleton.TorsoLeftArm.Color = _G.ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoLeftArm.Visible = _G.OnScreen
+                if BodyParts.LeftUpperArm then
+                    local ArmPos = Camera:WorldToViewportPoint(BodyParts.LeftUpperArm.Position)
+                    data.Skeleton.TorsoLeftArm.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
+                    data.Skeleton.TorsoLeftArm.To = Vector2.new(ArmPos.X, ArmPos.Y)
+                    data.Skeleton.TorsoLeftArm.Color = ESPSettings.SkeletonColor
+                    data.Skeleton.TorsoLeftArm.Visible = OnScreen
                 else
                     data.Skeleton.TorsoLeftArm.Visible = false
                 end
 
-                if _G.BodyParts.RightUpperArm then
-                    _G.ArmPos = _G.Camera:WorldToViewportPoint(_G.BodyParts.RightUpperArm.Position)
-                    data.Skeleton.TorsoRightArm.From = Vector2.new(_G.TorsoPos.X, _G.TorsoPos.Y)
-                    data.Skeleton.TorsoRightArm.To = Vector2.new(_G.ArmPos.X, _G.ArmPos.Y)
-                    data.Skeleton.TorsoRightArm.Color = _G.ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoRightArm.Visible = _G.OnScreen
+                if BodyParts.RightUpperArm then
+                    local ArmPos = Camera:WorldToViewportPoint(BodyParts.RightUpperArm.Position)
+                    data.Skeleton.TorsoRightArm.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
+                    data.Skeleton.TorsoRightArm.To = Vector2.new(ArmPos.X, ArmPos.Y)
+                    data.Skeleton.TorsoRightArm.Color = ESPSettings.SkeletonColor
+                    data.Skeleton.TorsoRightArm.Visible = OnScreen
                 else
                     data.Skeleton.TorsoRightArm.Visible = false
                 end
 
-                if _G.BodyParts.LeftLowerLeg then
-                    _G.LegPos = _G.Camera:WorldToViewportPoint(_G.BodyParts.LeftLowerLeg.Position)
-                    data.Skeleton.TorsoLeftLeg.From = Vector2.new(_G.TorsoPos.X, _G.TorsoPos.Y)
-                    data.Skeleton.TorsoLeftLeg.To = Vector2.new(_G.LegPos.X, _G.LegPos.Y)
-                    data.Skeleton.TorsoLeftLeg.Color = _G.ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoLeftLeg.Visible = _G.OnScreen
+                if BodyParts.LeftLowerLeg then
+                    local LegPos = Camera:WorldToViewportPoint(BodyParts.LeftLowerLeg.Position)
+                    data.Skeleton.TorsoLeftLeg.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
+                    data.Skeleton.TorsoLeftLeg.To = Vector2.new(LegPos.X, LegPos.Y)
+                    data.Skeleton.TorsoLeftLeg.Color = ESPSettings.SkeletonColor
+                    data.Skeleton.TorsoLeftLeg.Visible = OnScreen
                 else
                     data.Skeleton.TorsoLeftLeg.Visible = false
                 end
 
-                if _G.BodyParts.RightLowerLeg then
-                    _G.LegPos = _G.Camera:WorldToViewportPoint(_G.BodyParts.RightLowerLeg.Position)
-                    data.Skeleton.TorsoRightLeg.From = Vector2.new(_G.TorsoPos.X, _G.TorsoPos.Y)
-                    data.Skeleton.TorsoRightLeg.To = Vector2.new(_G.LegPos.X, _G.LegPos.Y)
-                    data.Skeleton.TorsoRightLeg.Color = _G.ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoRightLeg.Visible = _G.OnScreen
+                if BodyParts.RightLowerLeg then
+                    local LegPos = Camera:WorldToViewportPoint(BodyParts.RightLowerLeg.Position)
+                    data.Skeleton.TorsoRightLeg.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
+                    data.Skeleton.TorsoRightLeg.To = Vector2.new(LegPos.X, LegPos.Y)
+                    data.Skeleton.TorsoRightLeg.Color = ESPSettings.SkeletonColor
+                    data.Skeleton.TorsoRightLeg.Visible = OnScreen
                 else
                     data.Skeleton.TorsoRightLeg.Visible = false
                 end
@@ -770,31 +780,33 @@ _G.RunService.RenderStepped:Connect(function(delta)
             end
         end
 
-        if _G.ShowTracers.state and data.Tracer then
-            _G.ScreenBottom = Vector2.new(_G.Camera.ViewportSize.X / 2, _G.Camera.ViewportSize.Y)
-            data.Tracer.From = _G.ScreenBottom
-            data.Tracer.To = Vector2.new(_G.Pos.X, _G.Pos.Y)
-            data.Tracer.Color = _G.ESPSettings.TracerColor
-            data.Tracer.Thickness = _G.ESPSettings.TracerThickness
-            data.Tracer.Visible = _G.OnScreen
+        if ShowTracers.state and data.Tracer then
+            local ScreenBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+            data.Tracer.From = ScreenBottom
+            data.Tracer.To = Vector2.new(Pos.X, Pos.Y)
+            data.Tracer.Color = ESPSettings.TracerColor
+            data.Tracer.Thickness = ESPSettings.TracerThickness
+            data.Tracer.Visible = OnScreen
         elseif data.Tracer then
             data.Tracer.Visible = false
         end
     end
 
-    if _G.ShouldCheckVisibility then
-        _G.LastVisibilityCheck = _G.CurrentTime
+    if ShouldCheckVisibility then
+        LastVisibilityCheck = CurrentTime
     end
 end)
 
 -- Periodic update (only when needed)
-_G.LastSettingsUpdate = 0
-_G.SettingsUpdateInterval = 1 -- Update settings every 1 second if changed
+local LastSettingsUpdate = 0
+local SettingsUpdateInterval = 1 -- Update settings every 1 second if changed
 
-_G.RunService.Heartbeat:Connect(function()
-    _G.CurrentTime = tick()
-    if _G.CurrentTime - _G.LastSettingsUpdate >= _G.SettingsUpdateInterval then
-        _G.UpdateAllESPSettings()
-        _G.LastSettingsUpdate = _G.CurrentTime
+RunService.Heartbeat:Connect(function()
+    local CurrentTime = tick()
+    if CurrentTime - LastSettingsUpdate >= SettingsUpdateInterval then
+        UpdateAllESPSettings()
+        LastSettingsUpdate = CurrentTime
     end
 end)
+
+_G.CROW:SendNotification("ESP initialized successfully!", 5)
