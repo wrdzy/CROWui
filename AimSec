@@ -1,0 +1,994 @@
+-- Core Services
+local Players            = game:GetService("Players")
+local RunService         = game:GetService("RunService")
+local UserInputService   = game:GetService("UserInputService")
+local Camera             = workspace.CurrentCamera
+
+-- Player References
+local LocalPlayer        = Players.LocalPlayer
+local Mouse              = LocalPlayer:GetMouse()
+
+-- Drawing Objects
+local FOVCircle          = Drawing.new("Circle")
+FOVCircle.Thickness      = 2
+FOVCircle.NumSides       = 60
+FOVCircle.Position       = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+FOVCircle.Radius         = 100
+FOVCircle.Color          = Color3.new(1,1,1) -- Matches Customize section default
+FOVCircle.Transparency   = 1 - 0.5 -- Matches Customize section default (0.5 transparency)
+FOVCircle.Visible        = false
+
+local InfoBox            = Drawing.new("Square")
+InfoBox.Size             = Vector2.new(200, 60)
+InfoBox.Position         = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+InfoBox.Filled           = true
+InfoBox.Visible          = false
+
+local InfoBorder         = Drawing.new("Square")
+InfoBorder.Size          = Vector2.new(200, 60)
+InfoBorder.Position      = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+InfoBorder.Filled        = false
+InfoBorder.Thickness      = 2
+InfoBorder.Visible       = false
+
+local StatusText         = Drawing.new("Text")
+StatusText.Size          = 20
+StatusText.Outline       = true
+StatusText.Position      = Vector2.new(Camera.ViewportSize.X/2+5, Camera.ViewportSize.Y/2+5)
+StatusText.Visible       = false
+
+local HealthText         = Drawing.new("Text")
+HealthText.Size          = 20
+HealthText.Outline       = true
+HealthText.Position      = Vector2.new(Camera.ViewportSize.X/2+5, Camera.ViewportSize.Y/2+30)
+HealthText.Visible       = false
+
+local TargetIndicator    = Drawing.new("Circle")
+TargetIndicator.Thickness = 2
+TargetIndicator.NumSides = 4
+TargetIndicator.Radius   = 5
+TargetIndicator.Color     = Color3.new(1,1,1) -- Matches Customize section default
+TargetIndicator.Transparency = 1 - 0.5 -- Matches Customize section default (0.5 transparency)
+TargetIndicator.Visible  = false
+
+-- State Variables
+local CurrentTarget      = nil
+local CurrentTargetPart  = nil
+local AimlockConnection  = nil
+local MouseMoveConnection= nil
+local LastShotTime       = 0 -- Tracks last autoshoot time
+local AutoShootCooldown  = 0.02
+
+local STICKY_RANGE       = 15
+local FOV_OFFSET_Y       = 57
+local INDICATOR_OFFSET_Y = 57
+
+-- Body Part Definitions (R6 & R15)
+local BodyPartDefinitions = {
+    Head  = {"Head"},
+    Torso = {"HumanoidRootPart"},
+    Legs  = {"Left Leg","LeftUpperLeg"}
+}
+local TargetPartOptions = {"Head","Torso","Legs"}
+
+-- Utility Functions
+local function FixTransparency(value)
+    return 1 - value
+end
+
+local function HasForceField(character)
+    if not character then return false end
+    return character:FindFirstChildWhichIsA("ForceField") ~= nil
+end
+
+local function IsVisible(player, part)
+    if not player or not player.Character or not part then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {LocalPlayer.Character}
+    local origin = Camera.CFrame.Position
+    local dir    = part.Position - origin
+    local hit    = workspace:Raycast(origin, dir, params)
+    return not (hit and not hit.Instance:IsDescendantOf(player.Character))
+end
+
+local function GetBestTargetPart(player, selectedParts)
+    if not player or not player.Character then return nil end
+    local valid = {}
+    local wallCheck = library.flags["WallCheck"]
+    for _, partType in ipairs(selectedParts) do
+        local names = BodyPartDefinitions[partType]
+        if names then
+            for _, name in ipairs(names) do
+                local part = player.Character:FindFirstChild(name)
+                if part and part:IsA("BasePart") then
+                    if not wallCheck or IsVisible(player, part) then
+                        table.insert(valid, part)
+                    end
+                end
+            end
+        end
+    end
+    
+    if #valid == 0 then return nil end
+    
+    if #selectedParts > 1 then
+        local randomIndex = math.random(1, #valid)
+        return valid[randomIndex]
+    else
+        local closest, minDist = nil, math.huge
+        local refPoint
+        if library.flags["AimMethod"] == "Camera" then
+            refPoint = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+        else
+            refPoint = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+        end
+
+        for _, part in ipairs(valid) do
+            local sp = Camera:WorldToScreenPoint(part.Position)
+            if sp.Z > 0 then
+                local screenPos = Vector2.new(sp.X, sp.Y)
+                local dist = (screenPos - refPoint).Magnitude
+                if dist < minDist then
+                    closest, minDist = part, dist
+                end
+            end
+        end
+        return closest
+    end
+end
+
+local function ApplyPrediction(part)
+    local mode = library.flags["PredictionMode"]
+    if mode == "Off" then return part.Position end
+    local vel = part.Velocity
+    if mode == "Manual" then
+        return part.Position + vel * (library.flags["ManualPrediction"] or 0)
+    elseif mode == "Auto" then
+        local dist = (Camera.CFrame.Position - part.Position).Magnitude
+        return part.Position + vel * (dist / 200)
+    end
+    return part.Position
+end
+
+local function CalculateMove(dx, dy)
+    local smooth = library.flags["Smoothness"] or 0
+    local stickyAim = library.flags["StickyAim"] or false
+    
+    if stickyAim then
+        local dist = math.sqrt(dx*dx + dy*dy)
+        if dist < STICKY_RANGE then
+            local slowFactor = dist / STICKY_RANGE
+            dx = dx * (slowFactor * 0.5)
+            dy = dy * (slowFactor * 0.5)
+        end
+    end
+    
+    dx = dx * (1 - smooth)
+    dy = dy * (1 - smooth)
+    
+    return dx, dy
+end
+
+local function UpdateFOVPosition()
+    if library.flags["AimMethod"] == "Camera" then
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    else
+        FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+    end
+end
+
+local function UpdateInfoUIVisibility()
+    if not library.flags["ShowInfoUI"] or not CurrentTarget then
+        InfoBox.Visible = false
+        InfoBorder.Visible = false
+        StatusText.Visible = false
+        HealthText.Visible = false
+        TargetIndicator.Visible = false
+        return
+    end
+
+    InfoBox.Visible   = false
+    InfoBorder.Visible= false
+    StatusText.Visible= false
+
+    StatusText.Text = "Target: " .. CurrentTarget.Name ..
+        (CurrentTargetPart and " ("..CurrentTargetPart.Name..")" or "")
+
+    local humanoid = CurrentTarget.Character and CurrentTarget.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        HealthText.Visible = false
+        HealthText.Text    = "Health: " .. math.floor(humanoid.Health)
+        if library.flags["DynamicHealthColor"] then
+            local pct = humanoid.Health / humanoid.MaxHealth
+            HealthText.Color = Color3.fromRGB(255*(1-pct),255*pct,0)
+        else
+            HealthText.Color       = library.flags["HealthTextColor"] or Color3.new(0,1,0)
+            HealthText.Transparency= FixTransparency(library.flags["HealthTextTrans"] or 0)
+        end
+    else
+        HealthText.Visible = false
+    end
+end
+
+local function SetupFOVTracking()
+    if MouseMoveConnection then MouseMoveConnection:Disconnect() end
+    
+    if library.flags["AimMethod"] == "Mouse" then
+        MouseMoveConnection = UserInputService.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement then
+                FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+            end
+        end)
+    end
+end
+
+local function Cleanup()
+    if AimlockConnection then AimlockConnection:Disconnect() end
+    if MouseMoveConnection then MouseMoveConnection:Disconnect() end
+    AimlockConnection, MouseMoveConnection = nil, nil
+end
+
+local function UpdateTargetIndicator(target, targetPart)
+    if not target or not target.Character then
+        CROW.targetName:SetValue('nil')
+        CROW.targetDisplay:SetValue('nil')
+        CROW.targetHealth:SetValue('0')
+        CROW.targetDistance:SetValue('0m')
+        CROW.targetTool:SetValue('nil')
+        return
+    end
+    
+    CROW.targetName:SetValue(target.Name)
+    local displayName = target.DisplayName or target.Name
+    CROW.targetDisplay:SetValue(displayName)
+    
+    local humanoid = target.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        local healthText = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+        CROW.targetHealth:SetValue(healthText)
+    else
+        CROW.targetHealth:SetValue('0/0')
+    end
+    
+    local localCharacter = LocalPlayer.Character
+    if localCharacter and localCharacter:FindFirstChild("HumanoidRootPart") and target.Character:FindFirstChild("HumanoidRootPart") then
+        local distance = (localCharacter.HumanoidRootPart.Position - target.Character.HumanoidRootPart.Position).Magnitude
+        CROW.targetDistance:SetValue(math.floor(distance) .. 'm')
+    else
+        CROW.targetDistance:SetValue('0m')
+    end
+    
+    local tool = target.Character:FindFirstChildOfClass("Tool")
+    if tool then
+        CROW.targetTool:SetValue(tool.Name)
+    else
+        CROW.targetTool:SetValue('nil')
+    end
+end
+
+local function StartAimlock()
+    Cleanup()
+    UpdateFOVPosition()
+    SetupFOVTracking()
+    math.randomseed(tick())
+
+    AimlockConnection = RunService.RenderStepped:Connect(function()
+        if not library.flags["AimlockEnabled"] then
+            InfoBox.Visible = false
+            InfoBorder.Visible = false
+            StatusText.Visible = false
+            HealthText.Visible = false
+            TargetIndicator.Visible = false
+            UpdateTargetIndicator(nil, nil)
+            return
+        end
+
+        local teamCheck       = library.flags["TeamCheck"]
+        local wallCheck       = library.flags["WallCheck"]
+        local forceFieldCheck = library.flags["ForceFieldCheck"]
+        local aimMethod       = library.flags["AimMethod"]
+        local partsList       = library.flags["TargetParts"] or {"Head"}
+        local fovSize         = library.flags["FOVSize"] or 100
+        local autoShoot       = library.flags["AutoShoot"] or false
+
+        FOVCircle.Radius  = fovSize
+        FOVCircle.Visible = true
+
+        if CurrentTarget then
+            local char     = CurrentTarget.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if not humanoid or humanoid.Health <= 0
+            or (forceFieldCheck and HasForceField(char))
+            or (wallCheck and CurrentTargetPart and not IsVisible(CurrentTarget, CurrentTargetPart)) then
+                CurrentTarget, CurrentTargetPart = nil, nil
+                UpdateInfoUIVisibility()
+                TargetIndicator.Visible = false
+                UpdateTargetIndicator(nil, nil)
+            end
+        end
+
+        if not CurrentTarget then
+            local closest = fovSize
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player == LocalPlayer then continue end
+                local char     = player.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if not humanoid or humanoid.Health <= 0 then continue end
+                if teamCheck and player.Team == LocalPlayer.Team then continue end
+                if forceFieldCheck and HasForceField(char) then continue end
+
+                local part = GetBestTargetPart(player, partsList)
+                if not part then continue end
+                if wallCheck and not IsVisible(player, part) then continue end
+
+                local sp = Camera:WorldToScreenPoint(part.Position)
+                if sp.Z <= 0 then continue end
+
+                local screenPos = Vector2.new(sp.X, sp.Y)
+                local center
+                if aimMethod == "Camera" then
+                    center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+                else
+                    center = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+                end
+                local dist = (screenPos - center).Magnitude
+
+                if dist < closest then
+                    CurrentTarget, CurrentTargetPart = player, part
+                    closest = dist
+                end
+            end
+            UpdateInfoUIVisibility()
+            UpdateTargetIndicator(CurrentTarget, CurrentTargetPart)
+        end
+
+        if CurrentTarget and CurrentTargetPart then
+            UpdateInfoUIVisibility()
+            UpdateTargetIndicator(CurrentTarget, CurrentTargetPart)
+            
+            local targetPos = ApplyPrediction(CurrentTargetPart)
+
+            if aimMethod == "Camera" then
+                local goal = CFrame.new(Camera.CFrame.Position, targetPos)
+                local smooth = library.flags["Smoothness"] or 0
+                Camera.CFrame = Camera.CFrame:Lerp(goal, 1 - smooth) -- Fixed line
+            else
+                local sp = Camera:WorldToScreenPoint(targetPos)
+                if sp.Z > 0 then
+                    local dx, dy = sp.X - Mouse.X, sp.Y - Mouse.Y
+                    local mx, my = CalculateMove(dx, dy)
+                    if mx ~= 0 or my ~= 0 then
+                        mousemoverel(mx, my)
+                    end
+                end
+            end
+
+            local sp2 = Camera:WorldToScreenPoint(targetPos)
+            if sp2.Z > 0 then
+                TargetIndicator.Position = Vector2.new(sp2.X, sp2.Y + INDICATOR_OFFSET_Y)
+                TargetIndicator.Visible = true
+                
+                if autoShoot and tick() - LastShotTime >= AutoShootCooldown then
+                    mouse1press()
+                    wait()
+                    mouse1release()
+                    LastShotTime = tick()
+                end
+            else
+                TargetIndicator.Visible = false
+            end
+        end
+    end)
+end
+
+local function StopAimlock()
+    Cleanup()
+    FOVCircle.Visible = false
+    InfoBox.Visible = false
+    InfoBorder.Visible = false
+    StatusText.Visible = false
+    HealthText.Visible = false
+    TargetIndicator.Visible = false
+    CurrentTarget, CurrentTargetPart = nil, nil
+    UpdateTargetIndicator(nil, nil)
+end
+
+-- UI Section
+local secaim = Aimlock:AddSection("Aim Lock", 1)
+
+secaim:AddSeparator({ text = "Main" })
+
+local aimlockToggle = secaim:AddToggle({
+    text    = "Key Aim Lock",
+    state   = false,
+    flag    = "AimlockEnabled",
+    tooltip = "Toggle the aim lock",
+    callback= function(on)
+        if on then StartAimlock() else StopAimlock() end
+    end
+})
+:AddBind({
+    text     = "Toggle Aim Lock",
+    mode     = "toggle",
+    bind     = "NONE",
+    flag     = "ToggleKey_1",
+    callback = function(on)
+        if on then StartAimlock() else StopAimlock() end
+    end
+})
+
+-- Autoshoot Toggle
+secaim:AddToggle({
+    text    = "Auto Shoot",
+    state   = false,
+    flag    = "AutoShoot",
+    tooltip = "Automatically shoot when targeting",
+    callback= function(on)
+        if not on then
+            -- Release mouse button if autoshoot is disabled
+            mouse1release()
+        end
+    end
+})
+
+secaim:AddToggle({
+    text    = "Team Check",
+    state   = false,
+    flag    = "TeamCheck",
+    tooltip = "Don't target teammates",
+    callback= function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddToggle({
+    text    = "Wall Check",
+    state   = false,
+    flag    = "WallCheck",
+    tooltip = "Don't target through walls",
+    callback= function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddToggle({
+    text    = "ForceField Check",
+    state   = false,
+    flag    = "ForceFieldCheck",
+    tooltip = "Don't target invulnerable players",
+    callback= function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddToggle({
+    text    = "Sticky Aim",
+    state   = false,
+    flag    = "StickyAim",
+    tooltip = "Makes your aim stick to targets"
+})
+
+secaim:AddList({
+    text     = "Aim Lock Method",
+    selected = "Camera",
+    values   = {"Camera","Mouse"},
+    flag     = "AimMethod",
+    tooltip  = "Choose aim method",
+    callback = function()
+        UpdateFOVPosition()
+        SetupFOVTracking()
+        CurrentTarget, CurrentTargetPart = nil, nil
+    end
+})
+
+secaim:AddList({
+    text     = "Target Body Parts",
+    selected = {"Head"},
+    multi    = true,
+    values   = TargetPartOptions,
+    flag     = "TargetParts",
+    tooltip  = "Which body parts to aim at",
+    callback = function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddSeparator({ text = "Misc" })
+
+secaim:AddSlider({
+    text      = "Mouse Smoothness",
+    min       = 0,
+    max       = 1.0,
+    increment = 0.05,
+    default   = 0,
+    flag      = "Smoothness",
+    tooltip   = "Higher = smoother"
+})
+
+secaim:AddSlider({
+    text      = "FOV Size",
+    min       = 50,
+    max       = 500,
+    increment = 1,
+    default   = 100,
+    suffix    = "px",
+    flag      = "FOVSize",
+    tooltip   = "Aim FOV radius",
+    callback  = function(v)
+        FOVCircle.Radius = v
+        CurrentTarget, CurrentTargetPart = nil, nil
+    end
+})
+
+secaim:AddSeparator({ text = "Prediction" })
+
+secaim:AddList({
+    text     = "Prediction Mode",
+    selected = "Off",
+    values   = {"Off","Manual","Auto"},
+    flag     = "PredictionMode",
+    tooltip  = "Aim prediction"
+})
+
+secaim:AddSlider({
+    text      = "Manual Prediction",
+    min       = 0,
+    max       = 0.5,
+    increment = 0.01,
+    default   = 0,
+    flag      = "ManualPrediction",
+    tooltip   = "Manual prediction strength"
+})
+
+local secedit = Aimlock:AddSection("Customize", 1)
+
+secedit:AddSeparator({ text = "Colors" })
+secedit:AddColor({
+    text     = "FOV Circle Color",
+    color    = Color3.new(1,1,1),
+    trans    = 0.5,
+    flag     = "FOVColor",
+    tooltip  = "Circle color/transparency",
+    callback = function(c,t)
+        FOVCircle.Color        = c
+        FOVCircle.Transparency = FixTransparency(t)
+    end
+})
+secedit:AddColor({
+    text     = "Indicator Color",
+    color    = Color3.new(1,1,1),
+    trans    = 0.5,
+    flag     = "IndicatorColor",
+    tooltip  = "Indicator color/transparency",
+    callback = function(c,t)
+        TargetIndicator.Color        = c
+        TargetIndicator.Transparency = FixTransparency(t)
+    end
+})
+
+-- ===================== ENHANCED SILENT AIM SECTION =====================
+
+local Camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Optimized references
+local GetChildren = game.GetChildren
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GuiInset = GuiService.GetGuiInset
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+local resume = coroutine.resume 
+local create = coroutine.create
+
+-- Cache for performance
+local TargetCache = {
+    Target = nil,
+    LastUpdate = 0,
+    UpdateInterval = 0.1 -- Update target every 0.1 seconds to reduce lag
+}
+
+-- Initialize default values
+library.flags = library.flags or {}
+library.flags["SilentFOVSize"] = library.flags["SilentFOVSize"] or 0
+library.flags["SilentHitChance"] = library.flags["SilentHitChance"] or 0
+
+-- Drawing Objects
+local fov_circle = Drawing.new("Circle")
+fov_circle.Thickness = 1
+fov_circle.NumSides = 64 -- Reduced for performance
+fov_circle.Radius = 0 -- Default FOV size (0px as shown in UI)
+fov_circle.Filled = false
+fov_circle.Visible = false
+fov_circle.ZIndex = 999
+fov_circle.Transparency = 1
+fov_circle.Color = Color3.fromRGB(54, 57, 241)
+
+local SilentTargetIndicator = Drawing.new("Circle")
+SilentTargetIndicator.Thickness = 2
+SilentTargetIndicator.NumSides = 4
+SilentTargetIndicator.Radius = 5
+SilentTargetIndicator.Color = Color3.new(1,1,1)
+SilentTargetIndicator.Transparency = 0.5
+SilentTargetIndicator.Visible = false
+
+-- Expected Arguments for hooking
+local ExpectedArguments = {
+    FindPartOnRayWithIgnoreList = {
+        ArgCountRequired = 3,
+        Args = {
+            "Instance", "Ray", "table", "boolean", "boolean"
+        }
+    },
+    FindPartOnRayWithWhitelist = {
+        ArgCountRequired = 3,
+        Args = {
+            "Instance", "Ray", "table", "boolean"
+        }
+    },
+    FindPartOnRay = {
+        ArgCountRequired = 2,
+        Args = {
+            "Instance", "Ray", "Instance", "boolean", "boolean"
+        }
+    },
+    Raycast = {
+        ArgCountRequired = 3,
+        Args = {
+            "Instance", "Vector3", "Vector3", "RaycastParams"
+        }
+    }
+}
+
+-- Utility Functions
+function CalculateChance(Percentage)
+    Percentage = math.floor(Percentage)
+    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
+    return chance <= Percentage / 100
+end
+
+local function getPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Camera, Vector)
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+
+local function ValidateArguments(Args, RayMethod)
+    local Matches = 0
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
+    for Pos, Argument in next, Args do
+        if typeof(Argument) == RayMethod.Args[Pos] then
+            Matches = Matches + 1
+        end
+    end
+    return Matches >= RayMethod.ArgCountRequired
+end
+
+local function getDirection(Origin, Position)
+    return (Position - Origin).Unit * 1000
+end
+
+local function getMousePosition()
+    return UserInputService:GetMouseLocation()
+end
+
+local function IsPlayerVisible(Player)
+    local PlayerCharacter = Player.Character
+    local LocalPlayerCharacter = LocalPlayer.Character
+    
+    if not (PlayerCharacter or LocalPlayerCharacter) then return end 
+    
+    local PlayerRoot = FindFirstChild(PlayerCharacter, library.flags["SilentTargetPart"] or "Head") or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+    
+    if not PlayerRoot then return end 
+    
+    local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
+    local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+    
+    return ((ObscuringObjects == 0 and true) or (ObscuringObjects > 0 and false))
+end
+
+local function getClosestPlayer()
+    -- Use cached target if recent enough
+    local currentTime = tick()
+    if TargetCache.Target and (currentTime - TargetCache.LastUpdate) < TargetCache.UpdateInterval then
+        -- Validate cached target is still valid
+        local char = TargetCache.Target.Parent
+        if char and char.Parent and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            return TargetCache.Target
+        end
+    end
+    
+    if not library.flags["SilentTargetPart"] then return end
+    local Closest
+    local DistanceToMouse
+    local mousePos = getMousePosition()
+    
+    for _, Player in next, GetPlayers(Players) do
+        if Player == LocalPlayer then continue end
+        if library.flags["SilentTeamCheck"] and Player.Team == LocalPlayer.Team then continue end
+
+        local Character = Player.Character
+        if not Character then continue end
+        
+        if library.flags["SilentVisibleCheck"] and not IsPlayerVisible(Player) then continue end
+
+        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+        local Humanoid = FindFirstChild(Character, "Humanoid")
+        if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+
+        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        if not OnScreen then continue end
+
+        local Distance = (mousePos - ScreenPosition).Magnitude
+        if Distance <= (DistanceToMouse or (library.flags["SilentFOVSize"] or 0)) then
+            Closest = Character[library.flags["SilentTargetPart"]]
+            DistanceToMouse = Distance
+        end
+    end
+    
+    -- Update cache
+    TargetCache.Target = Closest
+    TargetCache.LastUpdate = currentTime
+    
+    return Closest
+end
+
+-- UI Creation
+local SilentAimSection = Aimlock:AddSection("Silent Aim", 2)
+
+SilentAimSection:AddSeparator({ text = "Main" })
+
+SilentAimSection:AddToggle({
+    text = "Enabled",
+    state = false,
+    flag = "SilentAimEnabled",
+    callback = function(state)
+        -- Update FOV circle visibility when toggling
+        fov_circle.Visible = state
+        SilentTargetIndicator.Visible = state and library.flags["SilentShowIndicator"]
+    end
+}):AddBind({
+    text = "Toggle Silent Aim",
+    mode = "toggle",
+    bind = "NONE",
+    flag = "SilentAimToggleKey",
+    callback = function(state)
+        library.flags["SilentAimEnabled"] = state
+        -- Update FOV circle visibility when toggling via bind
+        fov_circle.Visible = state
+        SilentTargetIndicator.Visible = state and library.flags["SilentShowIndicator"]
+    end
+})
+
+SilentAimSection:AddToggle({
+    text = "Team Check",
+    state = false,
+    flag = "SilentTeamCheck"
+})
+
+SilentAimSection:AddToggle({
+    text = "Visible Check",
+    state = false,
+    flag = "SilentVisibleCheck"
+})
+
+SilentAimSection:AddList({
+    text = "Target Part",
+    selected = "Head",
+    values = {"Head", "HumanoidRootPart", "Random"},
+    flag = "SilentTargetPart",
+    callback = function(value)
+        -- Clear cache when target part changes
+        TargetCache.Target = nil
+    end
+})
+
+SilentAimSection:AddList({
+    text = "Silent Aim Method",
+    selected = "All Methods",
+    values = {
+        "All Methods",
+        "Raycast",
+        "FindPartOnRayWithIgnoreList",
+        "FindPartOnRayWithWhitelist",
+        "FindPartOnRay"
+    },
+    flag = "SilentMethod"
+})
+
+SilentAimSection:AddSlider({
+    text = "Hit Chance",
+    min = 0,
+    max = 100,
+    increment = 1,
+    default = 0, -- Default 0% hit chance as shown in UI
+    suffix = "%",
+    flag = "SilentHitChance"
+})
+
+-- FOV Slider in main section
+SilentAimSection:AddSlider({
+    text = "FOV Size",
+    min = 0,
+    max = 360,
+    increment = 1,
+    default = 0, -- Matches the UI default shown (0px)
+    suffix = "px",
+    flag = "SilentFOVSize",
+    callback = function(value)
+        fov_circle.Radius = value
+        -- Clear cache when FOV changes
+        TargetCache.Target = nil
+    end
+})
+
+-- Customize Section
+local SilentCustomizeSection = Aimlock:AddSection("Silent Aim Customize", 2)
+
+SilentCustomizeSection:AddSeparator({ text = "Field Of View" })
+
+SilentCustomizeSection:AddColor({
+    text = "FOV Circle Color",
+    color = Color3.fromRGB(54, 57, 241),
+    trans = 0,
+    flag = "SilentFOVColor",
+    callback = function(color, trans)
+        fov_circle.Color = color
+        fov_circle.Transparency = 1 - trans
+    end
+})
+
+SilentCustomizeSection:AddSeparator({ text = "Target Indicator" })
+
+SilentCustomizeSection:AddToggle({
+    text = "Show Target Indicator",
+    state = false,
+    flag = "SilentShowIndicator",
+    callback = function(state)
+        SilentTargetIndicator.Visible = state and library.flags["SilentAimEnabled"]
+    end
+})
+
+SilentCustomizeSection:AddColor({
+    text = "Indicator Color",
+    color = Color3.new(1,1,1),
+    trans = 0.5,
+    flag = "SilentIndicatorColor",
+    callback = function(color, trans)
+        SilentTargetIndicator.Color = color
+        SilentTargetIndicator.Transparency = 1 - trans
+    end
+})
+
+-- Optimized Render Loop
+local frameCount = 0
+resume(create(function()
+    RenderStepped:Connect(function()
+        frameCount = frameCount + 1
+        
+        -- Update FOV circle every frame if enabled
+        if library.flags["SilentAimEnabled"] then 
+            fov_circle.Visible = true
+            local mousePos = getMousePosition()
+            fov_circle.Position = mousePos
+        else
+            fov_circle.Visible = false
+        end
+        
+        -- Update target indicator every 3 frames to reduce lag
+        if frameCount % 3 == 0 then
+            if library.flags["SilentShowIndicator"] and library.flags["SilentAimEnabled"] then
+                local target = getClosestPlayer()
+                if target then 
+                    local Root = target.Parent.PrimaryPart or target
+                    local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
+                    
+                    SilentTargetIndicator.Visible = IsOnScreen
+                    SilentTargetIndicator.Position = Vector2.new(RootToViewportPoint.X, RootToViewportPoint.Y)
+                else 
+                    SilentTargetIndicator.Visible = false 
+                end
+            else
+                SilentTargetIndicator.Visible = false
+            end
+        end
+    end)
+end))
+
+-- Enhanced Hooks with better method handling
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
+    local Method = getnamecallmethod()
+    local Arguments = {...}
+    local self = Arguments[1]
+    local chance = CalculateChance(library.flags["SilentHitChance"] or 0)
+    
+    if library.flags["SilentAimEnabled"] and self == workspace and not checkcaller() and chance == true then
+        local silentMethod = library.flags["SilentMethod"]
+        
+        -- Check if this method should be hooked
+        if silentMethod == "All Methods" or silentMethod == Method then
+            if Method == "FindPartOnRayWithIgnoreList" and ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif Method == "FindPartOnRayWithWhitelist" and ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif Method == "FindPartOnRay" and ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif Method == "Raycast" and ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                local A_Origin = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    Arguments[3] = getDirection(A_Origin, HitPart.Position)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        end
+    end
+    return oldNamecall(...)
+end))
+
+-- Index hook for Mouse methods
+local oldIndex
+oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+    if library.flags["SilentAimEnabled"] and not checkcaller() and self == Mouse then
+        local silentMethod = library.flags["SilentMethod"]
+        
+        if silentMethod == "All Methods" then
+            if key == "Hit" or key == "Target" or key == "UnitRay" then
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    if key == "Hit" then
+                        return HitPart.CFrame
+                    elseif key == "Target" then
+                        return HitPart
+                    elseif key == "UnitRay" then
+                        return Ray.new(Camera.CFrame.Position, (HitPart.Position - Camera.CFrame.Position).Unit)
+                    end
+                end
+            end
+        end
+    end
+    return oldIndex(self, key)
+end))
+
+-- GetMouseLocation hook for additional support
+local oldGetMouseLocation
+oldGetMouseLocation = hookfunction(UserInputService.GetMouseLocation, function(...)
+    if library.flags["SilentAimEnabled"] and library.flags["SilentMethod"] == "All Methods" then
+        local HitPart = getClosestPlayer()
+        if HitPart then
+            local Vec3, OnScreen = WorldToViewportPoint(Camera, HitPart.Position)
+            if OnScreen then
+                return Vector2.new(Vec3.X, Vec3.Y)
+            end
+        end
+    end
+    return oldGetMouseLocation(...)
+end)
