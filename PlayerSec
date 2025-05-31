@@ -594,6 +594,7 @@ local speedSlider = secplayer:AddSlider({
     min = 16,
     max = 150,
     increment = 1,
+    default = speedValue,
     callback = function(v)
         speedValue = v
         if states.speedEnabled and character and character:FindFirstChild("Humanoid") then
@@ -629,6 +630,7 @@ local jumpSlider = secplayer:AddSlider({
     min = jumpMin,
     max = jumpMax,
     increment = jumpMultiplier,
+    default = jumpValue,
     callback = function(v)
         jumpValue = v
         if states.jumpEnabled and character and character:FindFirstChild("Humanoid") and jumpPropertyName ~= "" then
@@ -686,6 +688,7 @@ local fovSlider = secplayer:AddSlider({
     min = originalFov,
     max = 120,
     increment = 1,
+    default = fovValue,
     callback = function(v)
         fovValue = v
         if states.fovEnabled and camera then
@@ -730,7 +733,6 @@ secplayer:AddToggle({
     end
 })
 
---=============================CHARACTER CUSTOMIZATION============================
 -- Character Customization Section
 local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
 seccharacter:AddSeparator({ text = "Character Effects" })
