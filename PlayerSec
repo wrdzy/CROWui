@@ -882,6 +882,37 @@ local function storeOriginalColors()
     end
 end
 
+-- Function to restore original properties
+local function restoreOriginalColors()
+    for obj, properties in pairs(characterEffects.originalColors) do
+        if obj and obj.Parent then
+            pcall(function()
+                if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+                    if not characterEffects.customColorEnabled and not characterEffects.rainbowEnabled then
+                        obj.Color = properties.Color
+                    end
+                    if not characterEffects.materialEnabled then
+                        obj.Material = properties.Material
+                    end
+                    if not characterEffects.transparencyEnabled then
+                        obj.Transparency = properties.Transparency
+                        obj.Reflectance = properties.Reflectance
+                        
+                        local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
+                        if surfaceApp and properties.SurfaceAppearanceTransparency then
+                            surfaceApp.Transparency = properties.SurfaceAppearanceTransparency
+                        end
+                    end
+                elseif obj:IsA("Decal") then
+                    if not characterEffects.transparencyEnabled then
+                        obj.Transparency = properties.Transparency
+                    end
+                end
+            end)
+        end
+    end
+end
+
 -- Heavily optimized rainbow effect with throttling
 local function applyRainbowEffect()
     local now = tick()
