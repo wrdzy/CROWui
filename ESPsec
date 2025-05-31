@@ -1,812 +1,1072 @@
--- Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Teams = game:GetService("Teams")
+--==========AIMLOCK SECTION==========
+-- Core Services
+local Players            = game:GetService("Players")
+local RunService         = game:GetService("RunService")
+local UserInputService   = game:GetService("UserInputService")
+local Camera             = workspace.CurrentCamera
 
--- Validate critical objects
-local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then
-    warn("LocalPlayer not found.")
-    _G.CROW:SendNotification("ESP Error: LocalPlayer not found.", 5)
-    return
-end
+-- Player References
+local LocalPlayer        = Players.LocalPlayer
+local Mouse              = LocalPlayer:GetMouse()
 
-local Camera = workspace.CurrentCamera
-if not Camera then
-    warn("Camera not found.")
-    _G.CROW:SendNotification("ESP Error: Camera not found.", 5)
-    return
-end
+-- Drawing Objects
+local FOVCircle          = Drawing.new("Circle")
+FOVCircle.Thickness      = 2
+FOVCircle.NumSides       = 60
+FOVCircle.Position       = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+FOVCircle.Radius         = 100
+FOVCircle.Color          = Color3.new(1,1,1)
+FOVCircle.Transparency   = 1 - 0.5
+FOVCircle.Visible        = false
 
--- Validate ESPTab
-if not _G.ESPTab then
-    warn("ESPTab not found. Ensure CROW UI is properly initialized.")
-    _G.CROW:SendNotification("ESP Error: ESPTab not found.", 5)
-    return
-end
+local InfoBox            = Drawing.new("Square")
+InfoBox.Size             = Vector2.new(200, 60)
+InfoBox.Position         = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+InfoBox.Filled           = true
+InfoBox.Visible          = false
 
--- Validate AddSection method
-if not _G.ESPTab.AddSection or typeof(_G.ESPTab.AddSection) ~= "function" then
-    warn("ESPTab:AddSection is not a valid method.")
-    _G.CROW:SendNotification("ESP Error: ESPTab:AddSection is not valid.", 5)
-    return
-end
+local InfoBorder         = Drawing.new("Square")
+InfoBorder.Size          = Vector2.new(200, 60)
+InfoBorder.Position      = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+InfoBorder.Filled        = false
+InfoBorder.Thickness      = 2
+InfoBorder.Visible       = false
 
--- Create ESP sections
-local SecESP = _G.ESPTab:AddSection("ESP", 1)
-if not SecESP then
-    warn("Failed to create ESP section.")
-    _G.CROW:SendNotification("ESP Error: Failed to create ESP section.", 5)
-    return
-end
+local StatusText         = Drawing.new("Text")
+StatusText.Size          = 20
+StatusText.Outline       = true
+StatusText.Position      = Vector2.new(Camera.ViewportSize.X/2+5, Camera.ViewportSize.Y/2+5)
+StatusText.Visible       = false
 
-local SecCustomESP = _G.ESPTab:AddSection("Customise ESP", 2)
-if not SecCustomESP then
-    warn("Failed to create Customise ESP section.")
-    _G.CROW:SendNotification("ESP Error: Failed to create Customise ESP section.", 5)
-    return
-end
+local HealthText         = Drawing.new("Text")
+HealthText.Size          = 20
+HealthText.Outline       = true
+HealthText.Position      = Vector2.new(Camera.ViewportSize.X/2+5, Camera.ViewportSize.Y/2+30)
+HealthText.Visible       = false
 
--- Validate AddToggle method
-if not SecESP.AddToggle or typeof(SecESP.AddToggle) ~= "function" then
-    warn("SecESP:AddToggle is not a valid method.")
-    _G.CROW:SendNotification("ESP Error: SecESP:AddToggle is not valid.", 5)
-    return
-end
+local TargetIndicator    = Drawing.new("Circle")
+TargetIndicator.Thickness = 2
+TargetIndicator.NumSides = 4
+TargetIndicator.Radius   = 5
+TargetIndicator.Color     = Color3.new(1,1,1)
+TargetIndicator.Transparency = 1 - 0.5
+TargetIndicator.Visible  = false
 
--- Store references to all UI elements and ESP objects
-local ESPObjects = {}
+-- State Variables
+local CurrentTarget      = nil
+local CurrentTargetPart  = nil
+local AimlockConnection  = nil
+local MouseMoveConnection= nil
+local LastShotTime       = 0
+local AutoShootCooldown  = 0.02
 
--- Store current settings values with defaults
-local ESPSettings = {
-    BoxThickness = 2,
-    TextSize = 15,
-    AllyColor = Color3.fromRGB(96, 205, 255),
-    EnemyColor = Color3.fromRGB(255, 70, 70),
-    SkeletonColor = Color3.fromRGB(255, 255, 255),
-    TracerColor = Color3.fromRGB(255, 255, 255),
-    HealthBarWidth = 4,
-    HealthBarOffset = 2,
-    ESPScale = 1,
-    SkeletonThickness = 1,
-    TracerThickness = 1,
-    NameTextOffset = 16,
-    DistanceTextOffset = 2,
-    VisibilityTextOffset = 2
+local STICKY_RANGE       = 15
+local FOV_OFFSET_Y       = 57
+local INDICATOR_OFFSET_Y = 57
+
+-- Body Part Definitions (R6 & R15)
+local BodyPartDefinitions = {
+    Head  = {"Head"},
+    Torso = {"HumanoidRootPart"},
+    Legs  = {"Left Leg","LeftUpperLeg"}
 }
+local TargetPartOptions = {"Head","Torso","Legs"}
 
--- Track health bar animation states
-local HealthBarStates = {}
-
--- Setup Main ESP section
-SecESP:AddSeparator({
-    enabled = true,
-    text = "Main"
-})
-
--- Main ESP Toggle
-local ShowESP = SecESP:AddToggle({
-    text = "Enable ESP",
-    state = false,
-    tooltip = "Master switch for ESP features",
-    flag = "ShowESP"
-})
-
-ShowESP:AddBind({
-    enabled = true,
-    text = "Toggle ESP",
-    tooltip = "Hotkey to toggle ESP",
-    mode = "toggle",
-    bind = "NONE",
-    flag = "ESPToggleKey",
-    callback = function(state)
-        ShowESP.state = state
-    end
-})
-
--- ESP Features Toggles
-local ESPBox = SecESP:AddToggle({
-    text = "Show Box",
-    state = false,
-    tooltip = "Show box around players",
-    flag = "ESPBox"
-})
-
-local ShowHealthBar = SecESP:AddToggle({
-    text = "Show Health Bar",
-    state = false,
-    tooltip = "Show health bar next to players",
-    flag = "ShowHealthBar"
-})
-
-local ShowDistance = SecESP:AddToggle({
-    text = "Show Distance",
-    state = false,
-    tooltip = "Show distance to players",
-    flag = "ShowDistance"
-})
-
-local ShowNames = SecESP:AddToggle({
-    text = "Show Names",
-    state = false,
-    tooltip = "Show player names",
-    flag = "ShowNames"
-})
-
-local ShowVisibility = SecESP:AddToggle({
-    text = "Show Visibility",
-    state = false,
-    tooltip = "Show if players are visible",
-    flag = "ShowVisibility"
-})
-
-local ShowSkeleton = SecESP:AddToggle({
-    text = "Show Skeleton",
-    state = false,
-    tooltip = "Show player skeleton",
-    flag = "ShowSkeleton"
-})
-
-local ShowTracers = SecESP:AddToggle({
-    text = "Show Tracers",
-    state = false,
-    tooltip = "Show lines to players",
-    flag = "ShowTracers"
-})
-
--- Store all ESP toggles in a table
-local ESPToggles = {
-    Distance = ShowDistance,
-    Names = ShowNames,
-    Visibility = ShowVisibility,
-    Skeleton = ShowSkeleton,
-    Tracers = ShowTracers
-}
-
-SecESP:AddSeparator({
-    enabled = true,
-    text = "Team Settings"
-})
-
--- Team ESP Settings stored in table
-local TeamSettings = {
-    TeamCheck = SecESP:AddToggle({
-        text = "Only Show Enemies",
-        state = false,
-        tooltip = "Only show ESP for enemy players",
-        flag = "ESPTeamCheck"
-    }),
-    TeamColor = SecESP:AddToggle({
-        text = "Use Team Colors",
-        state = false,
-        tooltip = "Use team colors for ESP",
-        flag = "ESPTeamColor"
-    })
-}
-
--- Function to get all teams in the game
-local function GetTeamNames()
-    local TeamNames = {}
-    for _, team in ipairs(Teams:GetTeams()) do
-        if team.Name and team.Name ~= "Neutral" then
-            table.insert(TeamNames, team.Name)
-        end
-    end
-    return TeamNames
+-- Utility Functions
+local function FixTransparency(value)
+    return 1 - value
 end
 
-SecCustomESP:AddSeparator({
-    enabled = true,
-    text = "Colors"
-})
-
--- Team color settings
-local AllyColor = SecCustomESP:AddColor({
-    enabled = true,
-    text = "Ally Color",
-    tooltip = "Set the color for teammates",
-    color = ESPSettings.AllyColor,
-    flag = "AllyColor",
-    trans = 0,
-    open = false,
-    callback = function(color)
-        ESPSettings.AllyColor = color or ESPSettings.AllyColor
-    end
-})
-
-local EnemyColor = SecCustomESP:AddColor({
-    enabled = true,
-    text = "Enemy Color",
-    tooltip = "Set the color for enemies",
-    color = ESPSettings.EnemyColor,
-    flag = "EnemyColor",
-    trans = 0,
-    open = false,
-    callback = function(color)
-        ESPSettings.EnemyColor = color or ESPSettings.EnemyColor
-    end
-})
-
-local SkeletonColor = SecCustomESP:AddColor({
-    enabled = true,
-    text = "Skeleton Color",
-    tooltip = "Set the color for skeleton lines",
-    color = ESPSettings.SkeletonColor,
-    flag = "SkeletonColor",
-    trans = 0,
-    open = false,
-    callback = function(color)
-        ESPSettings.SkeletonColor = color or ESPSettings.SkeletonColor
-    end
-})
-
-local TracerColor = SecCustomESP:AddColor({
-    enabled = true,
-    text = "Tracer Color",
-    tooltip = "Set the color for tracer lines",
-    color = ESPSettings.TracerColor,
-    flag = "TracerColor",
-    trans = 0,
-    open = false,
-    callback = function(color)
-        ESPSettings.TracerColor = color or ESPSettings.TracerColor
-    end
-})
-
-SecCustomESP:AddSeparator({
-    enabled = true,
-    text = "Size Settings"
-})
-
--- Box Thickness Slider
-local BoxThickness = SecCustomESP:AddSlider({
-    text = "Box Thickness",
-    min = 1,
-    max = 5,
-    default = 2,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the thickness of ESP boxes",
-    flag = "BoxThickness",
-    callback = function(value)
-        ESPSettings.BoxThickness = value or 2
-        UpdateAllESPSettings()
-    end
-})
-
--- Text Size Slider
-local TextSize = SecCustomESP:AddSlider({
-    text = "Text Size",
-    min = 10,
-    max = 24,
-    default = 15,
-    increment = 1,
-    suffix = "pt",
-    tooltip = "Adjust the size of ESP text",
-    flag = "TextSize",
-    callback = function(value)
-        ESPSettings.TextSize = value or 15
-        UpdateAllESPSettings()
-    end
-})
-
--- Health Bar Width Slider
-local HealthBarWidth = SecCustomESP:AddSlider({
-    text = "Health Bar Width",
-    min = 2,
-    max = 8,
-    default = 4,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the width of health bars",
-    flag = "HealthBarWidth",
-    callback = function(value)
-        ESPSettings.HealthBarWidth = value or 4
-        UpdateAllESPSettings()
-    end
-})
-
--- Health Bar Offset Slider
-local HealthBarOffset = SecCustomESP:AddSlider({
-    text = "Health Bar Offset",
-    min = 0,
-    max = 10,
-    default = 2,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the distance of health bar from box",
-    flag = "HealthBarOffset",
-    callback = function(value)
-        ESPSettings.HealthBarOffset = value or 2
-        UpdateAllESPSettings()
-    end
-})
-
--- Skeleton Thickness Slider
-local SkeletonThickness = SecCustomESP:AddSlider({
-    text = "Skeleton Thickness",
-    min = 1,
-    max = 4,
-    default = 1,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the thickness of skeleton lines",
-    flag = "SkeletonThickness",
-    callback = function(value)
-        ESPSettings.SkeletonThickness = value or 1
-        UpdateAllESPSettings()
-    end
-})
-
--- Tracer Thickness Slider
-local TracerThickness = SecCustomESP:AddSlider({
-    text = "Tracer Thickness",
-    min = 1,
-    max = 4,
-    default = 1,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the thickness of tracer lines",
-    flag = "TracerThickness",
-    callback = function(value)
-        ESPSettings.TracerThickness = value or 1
-        UpdateAllESPSettings()
-    end
-})
-
--- Name Text Offset Slider
-local NameTextOffset = SecCustomESP:AddSlider({
-    text = "Name Text Offset",
-    min = 0,
-    max = 30,
-    default = 16,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the distance of name text above box",
-    flag = "NameTextOffset",
-    callback = function(value)
-        ESPSettings.NameTextOffset = value or 16
-        UpdateAllESPSettings()
-    end
-})
-
--- Distance Text Offset Slider
-local DistanceTextOffset = SecCustomESP:AddSlider({
-    text = "Distance Text Offset",
-    min = 0,
-    max = 20,
-    default = 2,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the distance of distance text below box",
-    flag = "DistanceTextOffset",
-    callback = function(value)
-        ESPSettings.DistanceTextOffset = value or 2
-        UpdateAllESPSettings()
-    end
-})
-
--- Visibility Text Offset Slider
-local VisibilityTextOffset = SecCustomESP:AddSlider({
-    text = "Visibility Text Offset",
-    min = 0,
-    max = 20,
-    default = 2,
-    increment = 1,
-    suffix = "px",
-    tooltip = "Adjust the distance of visibility text below box",
-    flag = "VisibilityTextOffset",
-    callback = function(value)
-        ESPSettings.VisibilityTextOffset = value or 2
-        UpdateAllESPSettings()
-    end
-})
-
--- ESP Scale Slider
-local ESPScale = SecCustomESP:AddSlider({
-    text = "ESP Scale",
-    min = 50,
-    max = 150,
-    default = 100,
-    increment = 10,
-    suffix = "%",
-    tooltip = "Adjust the overall scale of ESP elements",
-    flag = "ESPScale",
-    callback = function(value)
-        ESPSettings.ESPScale = (value or 100) / 100
-        UpdateAllESPSettings()
-    end
-})
-
--- Create ESP for a player
-local function CreateESP(player)
-    if player == LocalPlayer or ESPObjects[player] or not player:IsA("Player") then
-        return
-    end
-    
-    local success, Data = pcall(function()
-        return {
-            Box = Drawing.new("Square"),
-            Distance = Drawing.new("Text"),
-            HealthOutline = Drawing.new("Square"),
-            HealthBar = Drawing.new("Square"),
-            Name = Drawing.new("Text"),
-            Visibility = Drawing.new("Text"),
-            Tracer = Drawing.new("Line"),
-            Skeleton = {
-                HeadTorso = Drawing.new("Line"),
-                TorsoLeftArm = Drawing.new("Line"),
-                TorsoRightArm = Drawing.new("Line"),
-                TorsoLeftLeg = Drawing.new("Line"),
-                TorsoRightLeg = Drawing.new("Line")
-            }
-        }
-    end)
-    
-    if not success then
-        warn("Failed to create ESP objects for player: " .. tostring(player))
-        _G.CROW:SendNotification("ESP Error: Failed to create ESP objects for " .. tostring(player), 5)
-        return
-    end
-    
-    -- Initialize ESP box
-    Data.Box.Thickness = ESPSettings.BoxThickness
-    Data.Box.Filled = false
-    Data.Box.Visible = false
-    
-    -- Initialize distance text
-    Data.Distance.Size = ESPSettings.TextSize
-    Data.Distance.Center = true
-    Data.Distance.Outline = true
-    Data.Distance.OutlineColor = Color3.new(0, 0, 0)
-    Data.Distance.Font = Drawing.Fonts.UI
-    Data.Distance.Visible = false
-    
-    -- Initialize health bar
-    Data.HealthOutline.Thickness = 1
-    Data.HealthOutline.Filled = true
-    Data.HealthOutline.Color = Color3.new(0, 0, 0)
-    Data.HealthOutline.Visible = false
-    
-    Data.HealthBar.Thickness = 1
-    Data.HealthBar.Filled = true
-    Data.HealthBar.Color = Color3.new(0, 1, 0)
-    Data.HealthBar.Visible = false
-    
-    -- Initialize name
-    Data.Name.Size = ESPSettings.TextSize
-    Data.Name.Center = true
-    Data.Name.Outline = true
-    Data.Name.OutlineColor = Color3.new(0, 0, 0)
-    Data.Name.Font = Drawing.Fonts.UI
-    Data.Name.Visible = false
-    
-    -- Initialize visibility text
-    Data.Visibility.Size = ESPSettings.TextSize
-    Data.Visibility.Center = true
-    Data.Visibility.Outline = true
-    Data.Visibility.OutlineColor = Color3.new(0, 0, 0)
-    Data.Visibility.Font = Drawing.Fonts.UI
-    Data.Visibility.Visible = false
-    
-    -- Initialize tracer
-    Data.Tracer.Thickness = ESPSettings.TracerThickness
-    Data.Tracer.Visible = false
-    
-    -- Initialize skeleton
-    for _, line in pairs(Data.Skeleton) do
-        line.Thickness = ESPSettings.SkeletonThickness
-        line.Visible = false
-    end
-    
-    ESPObjects[player] = Data
-    HealthBarStates[player] = { CurrentHeight = 0 }
+local function HasForceField(character)
+    if not character then return false end
+    return character:FindFirstChildWhichIsA("ForceField") ~= nil
 end
 
--- Remove ESP for a player
-local function RemoveESP(player)
-    local Data = ESPObjects[player]
-    if not Data then
-        return
-    end
-    
-    for _, obj in pairs(Data) do
-        if type(obj) == "table" then
-            for _, line in pairs(obj) do
-                if line and line.Remove then
-                    line:Remove()
-                end
-            end
-        elseif obj and obj.Remove then
-            obj:Remove()
-        end
-    end
-    ESPObjects[player] = nil
-    HealthBarStates[player] = nil
+local function IsVisible(player, part)
+    if not player or not player.Character or not part then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {LocalPlayer.Character}
+    local origin = Camera.CFrame.Position
+    local dir    = part.Position - origin
+    local hit    = workspace:Raycast(origin, dir, params)
+    return not (hit and not hit.Instance:IsDescendantOf(player.Character))
 end
 
--- Check if player is visible
-local function IsPlayerVisible(character)
-    if not LocalPlayer.Character or not character then
-        return false
-    end
-    
-    local LocalHead = LocalPlayer.Character:FindFirstChild("Head")
-    local TargetHead = character:FindFirstChild("Head")
-    
-    if not LocalHead or not TargetHead then
-        return false
-    end
-    
-    local Ray = Ray.new(LocalHead.Position, (TargetHead.Position - LocalHead.Position).Unit * 1000)
-    local IgnoreList = {LocalPlayer.Character}
-    local HitPart = workspace:FindPartOnRayWithIgnoreList(Ray, IgnoreList)
-    
-    return HitPart and HitPart:IsDescendantOf(character)
-end
-
--- Update all ESP settings
-function UpdateAllESPSettings()
-    for _, data in pairs(ESPObjects) do
-        if data.Box then
-            data.Box.Thickness = ESPSettings.BoxThickness
-        end
-        if data.Distance then
-            data.Distance.Size = ESPSettings.TextSize
-        end
-        if data.Name then
-            data.Name.Size = ESPSettings.TextSize
-        end
-        if data.Visibility then
-            data.Visibility.Size = ESPSettings.TextSize
-        end
-        if data.Tracer then
-            data.Tracer.Thickness = ESPSettings.TracerThickness
-        end
-        for _, line in pairs(data.Skeleton or {}) do
-            line.Thickness = ESPSettings.SkeletonThickness
-        end
-    end
-end
-
--- Create ESP for existing players
-for _, player in ipairs(Players:GetPlayers()) do
-    CreateESP(player)
-end
-
--- Handle player joining and leaving
-Players.PlayerAdded:Connect(CreateESP)
-Players.PlayerRemoving:Connect(RemoveESP)
-
--- ESP rendering logic with visibility check throttling
-local LastVisibilityCheck = 0
-local VisibilityCheckInterval = 0.5 -- Check visibility every 0.5 seconds
-
-RunService.RenderStepped:Connect(function(delta)
-    if not ShowESP.state then
-        for _, data in pairs(ESPObjects) do
-            for _, obj in pairs(data) do
-                if type(obj) == "table" then
-                    for _, line in pairs(obj) do
-                        if line and line.Visible ~= nil then
-                            line.Visible = false
-                        end
+local function GetBestTargetPart(player, selectedParts)
+    if not player or not player.Character then return nil end
+    local valid = {}
+    local wallCheck = library.flags["WallCheck"]
+    for _, partType in ipairs(selectedParts) do
+        local names = BodyPartDefinitions[partType]
+        if names then
+            for _, name in ipairs(names) do
+                local part = player.Character:FindFirstChild(name)
+                if part and part:IsA("BasePart") then
+                    if not wallCheck or IsVisible(player, part) then
+                        table.insert(valid, part)
                     end
-                elseif obj and obj.Visible ~= nil then
-                    obj.Visible = false
                 end
             end
         end
-        return
     end
-
-    local CurrentTime = tick()
-    local ShouldCheckVisibility = CurrentTime - LastVisibilityCheck >= VisibilityCheckInterval
-
-    for player, data in pairs(ESPObjects) do
-        local Character = player.Character
-        local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
-        local Humanoid = Character and Character:FindFirstChild("Humanoid")
-
-        if not (player:IsA("Player") and Character and HRP and Humanoid and Humanoid.Health > 0) then
-            for _, obj in pairs(data) do
-                if type(obj) == "table" then
-                    for _, line in pairs(obj) do
-                        if line and line.Visible ~= nil then
-                            line.Visible = false
-                        end
-                    end
-                elseif obj and obj.Visible ~= nil then
-                    obj.Visible = false
-                end
-            end
-            continue
-        end
-        
-        if TeamSettings.TeamCheck.state and player.Team == LocalPlayer.Team and LocalPlayer.Team then
-            for _, obj in pairs(data) do
-                if type(obj) == "table" then
-                    for _, line in pairs(obj) do
-                        if line and line.Visible ~= nil then
-                            line.Visible = false
-                        end
-                    end
-                elseif obj and obj.Visible != nil then
-                    obj.Visible = false
-                end
-            end
-            continue
-        end
-
-        local Pos, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
-        local Distance = (Camera.CFrame.Position - HRP.Position).Magnitude
-        local Scale = math.clamp(1 / (Distance / 50), 0.5, 2) * ESPSettings.ESPScale
-        local BoxW, BoxH = 50 * Scale, 100 * Scale
-        local BoxX, BoxY = Pos.X - BoxW / 2, Pos.Y - BoxH / 2
-
-        local Color = TeamSettings.TeamColor.state and player.Team and player.Team.TeamColor.Color or
-                      (player.Team == LocalPlayer.Team and LocalPlayer.Team and ESPSettings.AllyColor or ESPSettings.EnemyColor)
-
-        if ESPBox.state and data.Box then
-            data.Box.Position = Vector2.new(BoxX, BoxY)
-            data.Box.Size = Vector2.new(BoxW, BoxH)
-            data.Box.Color = Color
-            data.Box.Thickness = ESPSettings.BoxThickness
-            data.Box.Visible = OnScreen
-        elseif data.Box then
-            data.Box.Visible = false
-        end
-
-        if ShowHealthBar.state and data.HealthOutline and data.HealthBar then
-            local HealthRatio = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
-            local BarWidth = ESPSettings.HealthBarWidth
-            local State = HealthBarStates[player]
-            State.CurrentHeight = State.CurrentHeight + (HealthRatio - State.CurrentHeight) * math.min(10 * delta, 1)
-            
-            data.HealthOutline.Position = Vector2.new(BoxX - BarWidth - ESPSettings.HealthBarOffset, BoxY)
-            data.HealthOutline.Size = Vector2.new(BarWidth, BoxH)
-            data.HealthOutline.Visible = OnScreen
-
-            data.HealthBar.Position = Vector2.new(BoxX - BarWidth - ESPSettings.HealthBarOffset, BoxY + (1 - State.CurrentHeight) * BoxH)
-            data.HealthBar.Size = Vector2.new(BarWidth, BoxH * State.CurrentHeight)
-            data.HealthBar.Color = Color3.fromRGB(255 * (1 - State.CurrentHeight), 255 * State.CurrentHeight, 0)
-            data.HealthBar.Visible = OnScreen
+    
+    if #valid == 0 then return nil end
+    
+    if #selectedParts > 1 then
+        local randomIndex = math.random(1, #valid)
+        return valid[randomIndex]
+    else
+        local closest, minDist = nil, math.huge
+        local refPoint
+        if library.flags["AimMethod"] == "Camera" then
+            refPoint = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         else
-            if data.HealthBar then data.HealthBar.Visible = false end
-            if data.HealthOutline then data.HealthOutline.Visible = false end
+            refPoint = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
         end
 
-        if ShowDistance.state and data.Distance then
-            data.Distance.Text = math.floor(Distance) .. "m"
-            data.Distance.Position = Vector2.new(Pos.X, BoxY + BoxH + ESPSettings.DistanceTextOffset)
-            data.Distance.Color = Color
-            data.Distance.Size = ESPSettings.TextSize
-            data.Distance.Visible = OnScreen
-        elseif data.Distance then
-            data.Distance.Visible = false
+        for _, part in ipairs(valid) do
+            local sp = Camera:WorldToScreenPoint(part.Position)
+            if sp.Z > 0 then
+                local screenPos = Vector2.new(sp.X, sp.Y)
+                local dist = (screenPos - refPoint).Magnitude
+                if dist < minDist then
+                    closest, minDist = part, dist
+                end
+            end
         end
-        
-        if ShowNames.state and data.Name then
-            data.Name.Text = player.Name
-            data.Name.Position = Vector2.new(Pos.X, BoxY - ESPSettings.NameTextOffset)
-            data.Name.Color = Color
-            data.Name.Size = ESPSettings.TextSize
-            data.Name.Visible = OnScreen
-        elseif data.Name then
-            data.Name.Visible = false
+        return closest
+    end
+end
+
+local function ApplyPrediction(part)
+    local mode = library.flags["PredictionMode"]
+    if mode == "Off" then return part.Position end
+    local vel = part.Velocity
+    if mode == "Manual" then
+        return part.Position + vel * (library.flags["ManualPrediction"] or 0)
+    elseif mode == "Auto" then
+        local dist = (Camera.CFrame.Position - part.Position).Magnitude
+        return part.Position + vel * (dist / 200)
+    end
+    return part.Position
+end
+
+local function CalculateMove(dx, dy)
+    local smooth = library.flags["Smoothness"] or 0
+    local stickyAim = library.flags["StickyAim"] or false
+    
+    if stickyAim then
+        local dist = math.sqrt(dx*dx + dy*dy)
+        if dist < STICKY_RANGE then
+            local slowFactor = dist / STICKY_RANGE
+            dx = dx * (slowFactor * 0.5)
+            dy = dy * (slowFactor * 0.5)
         end
-        
-        if ShowVisibility.state and data.Visibility then
-            local IsVisible = ShouldCheckVisibility and IsPlayerVisible(Character) or data.Visibility.Text == "Visible"
-            local VisText = IsVisible and "Visible" or "Hidden"
-            local VisColor = IsVisible and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-            local YOffset = ShowDistance.state and (ESPSettings.DistanceTextOffset + ESPSettings.TextSize + ESPSettings.VisibilityTextOffset) or ESPSettings.VisibilityTextOffset
+    end
+    
+    dx = dx * (1 - smooth)
+    dy = dy * (1 - smooth)
+    
+    return dx, dy
+end
+
+local function UpdateFOVPosition()
+    if library.flags["AimMethod"] == "Camera" then
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    else
+        FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+    end
+end
+
+local function UpdateInfoUIVisibility()
+    if not library.flags["ShowInfoUI"] or not CurrentTarget then
+        InfoBox.Visible = false
+        InfoBorder.Visible = false
+        StatusText.Visible = false
+        HealthText.Visible = false
+        TargetIndicator.Visible = false
+        return
+    end
+
+    InfoBox.Visible   = false
+    InfoBorder.Visible= false
+    StatusText.Visible= false
+
+    StatusText.Text = "Target: " .. CurrentTarget.Name ..
+        (CurrentTargetPart and " ("..CurrentTargetPart.Name..")" or "")
+
+    local humanoid = CurrentTarget.Character and CurrentTarget.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        HealthText.Visible = false
+        HealthText.Text    = "Health: " .. math.floor(humanoid.Health)
+        if library.flags["DynamicHealthColor"] then
+            local pct = humanoid.Health / humanoid.MaxHealth
+            HealthText.Color = Color3.fromRGB(255*(1-pct),255*pct,0)
+        else
+            HealthText.Color       = library.flags["HealthTextColor"] or Color3.new(0,1,0)
+            HealthText.Transparency= FixTransparency(library.flags["HealthTextTrans"] or 0)
+        end
+    else
+        HealthText.Visible = false
+    end
+end
+
+local function SetupFOVTracking()
+    if MouseMoveConnection then MouseMoveConnection:Disconnect() end
+    
+    if library.flags["AimMethod"] == "Mouse" then
+        MouseMoveConnection = UserInputService.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement then
+                FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+            end
+        end)
+    end
+end
+
+local function Cleanup()
+    if AimlockConnection then AimlockConnection:Disconnect() end
+    if MouseMoveConnection then MouseMoveConnection:Disconnect() end
+    AimlockConnection, MouseMoveConnection = nil, nil
+end
+
+-- Create target display labels (add these to UI section)
+_G.CROW.targetName = nil
+_G.CROW.targetDisplay = nil
+_G.CROW.targetHealth = nil
+_G.CROW.targetDistance = nil
+_G.CROW.targetTool = nil
+
+local function UpdateTargetIndicator(target, targetPart)
+    if not target or not target.Character then
+        if _G.CROW.targetName then _G.CROW.targetName:SetValue('nil') end
+        if _G.CROW.targetDisplay then _G.CROW.targetDisplay:SetValue('nil') end
+        if _G.CROW.targetHealth then _G.CROW.targetHealth:SetValue('0') end
+        if _G.CROW.targetDistance then _G.CROW.targetDistance:SetValue('0m') end
+        if _G.CROW.targetTool then _G.CROW.targetTool:SetValue('nil') end
+        return
+    end
+    
+    if _G.CROW.targetName then _G.CROW.targetName:SetValue(target.Name) end
+    local displayName = target.DisplayName or target.Name
+    if _G.CROW.targetDisplay then _G.CROW.targetDisplay:SetValue(displayName) end
+    
+    local humanoid = target.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        local healthText = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+        if _G.CROW.targetHealth then _G.CROW.targetHealth:SetValue(healthText) end
+    else
+        if _G.CROW.targetHealth then _G.CROW.targetHealth:SetValue('0/0') end
+    end
+    
+    local localCharacter = LocalPlayer.Character
+    if localCharacter and localCharacter:FindFirstChild("HumanoidRootPart") and target.Character:FindFirstChild("HumanoidRootPart") then
+        local distance = (localCharacter.HumanoidRootPart.Position - target.Character.HumanoidRootPart.Position).Magnitude
+        if _G.CROW.targetDistance then _G.CROW.targetDistance:SetValue(math.floor(distance) .. 'm') end
+    else
+        if _G.CROW.targetDistance then _G.CROW.targetDistance:SetValue('0m') end
+    end
+    
+    local tool = target.Character:FindFirstChildOfClass("Tool")
+    if tool then
+        if _G.CROW.targetTool then _G.CROW.targetTool:SetValue(tool.Name) end
+    else
+        if _G.CROW.targetTool then _G.CROW.targetTool:SetValue('nil') end
+    end
+end
+
+local function StartAimlock()
+    Cleanup()
+    UpdateFOVPosition()
+    SetupFOVTracking()
+    math.randomseed(tick())
+
+    AimlockConnection = RunService.RenderStepped:Connect(function()
+        if not library.flags["AimlockEnabled"] then
+            InfoBox.Visible = false
+            InfoBorder.Visible = false
+            StatusText.Visible = false
+            HealthText.Visible = false
+            TargetIndicator.Visible = false
+            UpdateTargetIndicator(nil, nil)
+            return
+        end
+
+        local teamCheck       = library.flags["TeamCheck"]
+        local wallCheck       = library.flags["WallCheck"]
+        local forceFieldCheck = library.flags["ForceFieldCheck"]
+        local aimMethod       = library.flags["AimMethod"]
+        local partsList       = library.flags["TargetParts"] or {"Head"}
+        local fovSize         = library.flags["FOVSize"] or 100
+        local autoShoot       = library.flags["AutoShoot"] or false
+
+        FOVCircle.Radius  = fovSize
+        FOVCircle.Visible = true
+
+        if CurrentTarget then
+            local char     = CurrentTarget.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if not humanoid or humanoid.Health <= 0
+            or (forceFieldCheck and HasForceField(char))
+            or (wallCheck and CurrentTargetPart and not IsVisible(CurrentTarget, CurrentTargetPart)) then
+                CurrentTarget, CurrentTargetPart = nil, nil
+                UpdateInfoUIVisibility()
+                TargetIndicator.Visible = false
+                UpdateTargetIndicator(nil, nil)
+            end
+        end
+
+        if not CurrentTarget then
+            local closest = fovSize
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player == LocalPlayer then continue end
+                local char     = player.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if not humanoid or humanoid.Health <= 0 then continue end
+                if teamCheck and player.Team == LocalPlayer.Team then continue end
+                if forceFieldCheck and HasForceField(char) then continue end
+
+                local part = GetBestTargetPart(player, partsList)
+                if not part then continue end
+                if wallCheck and not IsVisible(player, part) then continue end
+
+                local sp = Camera:WorldToScreenPoint(part.Position)
+                if sp.Z <= 0 then continue end
+
+                local screenPos = Vector2.new(sp.X, sp.Y)
+                local center
+                if aimMethod == "Camera" then
+                    center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+                else
+                    center = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+                end
+                local dist = (screenPos - center).Magnitude
+
+                if dist < closest then
+                    CurrentTarget, CurrentTargetPart = player, part
+                    closest = dist
+                end
+            end
+            UpdateInfoUIVisibility()
+            UpdateTargetIndicator(CurrentTarget, CurrentTargetPart)
+        end
+
+        if CurrentTarget and CurrentTargetPart then
+            UpdateInfoUIVisibility()
+            UpdateTargetIndicator(CurrentTarget, CurrentTargetPart)
             
-            data.Visibility.Text = VisText
-            data.Visibility.Position = Vector2.new(Pos.X, BoxY + BoxH + YOffset)
-            data.Visibility.Color = VisColor
-            data.Visibility.Size = ESPSettings.TextSize
-            data.Visibility.Visible = OnScreen
-        elseif data.Visibility then
-            data.Visibility.Visible = false
-        end
+            local targetPos = ApplyPrediction(CurrentTargetPart)
 
-        if ShowSkeleton.state and data.Skeleton then
-            local BodyParts = {
-                Head = Character:FindFirstChild("Head"),
-                UpperTorso = Character:FindFirstChild("UpperTorso") or Character:FindFirstChild("Torso"),
-                LeftUpperArm = Character:FindFirstChild("LeftUpperArm"),
-                RightUpperArm = Character:FindFirstChild("RightUpperArm"),
-                LeftLowerLeg = Character:FindFirstChild("LeftLowerLeg"),
-                RightLowerLeg = Character:FindFirstChild("RightLowerLeg")
-            }
+            if aimMethod == "Camera" then
+                local goal = CFrame.new(Camera.CFrame.Position, targetPos)
+                local smooth = library.flags["Smoothness"] or 0
+                Camera.CFrame = Camera.CFrame:Lerp(goal, 1 - smooth)
+            else
+                local sp = Camera:WorldToScreenPoint(targetPos)
+                if sp.Z > 0 then
+                    local dx, dy = sp.X - Mouse.X, sp.Y - Mouse.Y
+                    local mx, my = CalculateMove(dx, dy)
+                    if mx ~= 0 or my ~= 0 then
+                        mousemoverel(mx, my)
+                    end
+                end
+            end
 
-            if BodyParts.Head and BodyParts.UpperTorso then
-                local HeadPos = Camera:WorldToViewportPoint(BodyParts.Head.Position)
-                local TorsoPos = Camera:WorldToViewportPoint(BodyParts.UpperTorso.Position)
+            local sp2 = Camera:WorldToScreenPoint(targetPos)
+            if sp2.Z > 0 then
+                TargetIndicator.Position = Vector2.new(sp2.X, sp2.Y + INDICATOR_OFFSET_Y)
+                TargetIndicator.Visible = true
                 
-                data.Skeleton.HeadTorso.From = Vector2.new(HeadPos.X, HeadPos.Y)
-                data.Skeleton.HeadTorso.To = Vector2.new(TorsoPos.X, TorsoPos.Y)
-                data.Skeleton.HeadTorso.Color = ESPSettings.SkeletonColor
-                data.Skeleton.HeadTorso.Visible = OnScreen
-
-                if BodyParts.LeftUpperArm then
-                    local ArmPos = Camera:WorldToViewportPoint(BodyParts.LeftUpperArm.Position)
-                    data.Skeleton.TorsoLeftArm.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
-                    data.Skeleton.TorsoLeftArm.To = Vector2.new(ArmPos.X, ArmPos.Y)
-                    data.Skeleton.TorsoLeftArm.Color = ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoLeftArm.Visible = OnScreen
-                else
-                    data.Skeleton.TorsoLeftArm.Visible = false
-                end
-
-                if BodyParts.RightUpperArm then
-                    local ArmPos = Camera:WorldToViewportPoint(BodyParts.RightUpperArm.Position)
-                    data.Skeleton.TorsoRightArm.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
-                    data.Skeleton.TorsoRightArm.To = Vector2.new(ArmPos.X, ArmPos.Y)
-                    data.Skeleton.TorsoRightArm.Color = ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoRightArm.Visible = OnScreen
-                else
-                    data.Skeleton.TorsoRightArm.Visible = false
-                end
-
-                if BodyParts.LeftLowerLeg then
-                    local LegPos = Camera:WorldToViewportPoint(BodyParts.LeftLowerLeg.Position)
-                    data.Skeleton.TorsoLeftLeg.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
-                    data.Skeleton.TorsoLeftLeg.To = Vector2.new(LegPos.X, LegPos.Y)
-                    data.Skeleton.TorsoLeftLeg.Color = ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoLeftLeg.Visible = OnScreen
-                else
-                    data.Skeleton.TorsoLeftLeg.Visible = false
-                end
-
-                if BodyParts.RightLowerLeg then
-                    local LegPos = Camera:WorldToViewportPoint(BodyParts.RightLowerLeg.Position)
-                    data.Skeleton.TorsoRightLeg.From = Vector2.new(TorsoPos.X, TorsoPos.Y)
-                    data.Skeleton.TorsoRightLeg.To = Vector2.new(LegPos.X, LegPos.Y)
-                    data.Skeleton.TorsoRightLeg.Color = ESPSettings.SkeletonColor
-                    data.Skeleton.TorsoRightLeg.Visible = OnScreen
-                else
-                    data.Skeleton.TorsoRightLeg.Visible = false
+                if autoShoot and tick() - LastShotTime >= AutoShootCooldown then
+                    mouse1press()
+                    wait()
+                    mouse1release()
+                    LastShotTime = tick()
                 end
             else
-                for _, line in pairs(data.Skeleton) do
-                    line.Visible = false
+                TargetIndicator.Visible = false
+            end
+        end
+    end)
+end
+
+local function StopAimlock()
+    Cleanup()
+    FOVCircle.Visible = false
+    InfoBox.Visible = false
+    InfoBorder.Visible = false
+    StatusText.Visible = false
+    HealthText.Visible = false
+    TargetIndicator.Visible = false
+    CurrentTarget, CurrentTargetPart = nil, nil
+    UpdateTargetIndicator(nil, nil)
+end
+
+-- UI Section
+local secaim = _G.Aimlock:AddSection("Aim Lock", 1)
+
+secaim:AddSeparator({ text = "Main" })
+
+local aimlockToggle = secaim:AddToggle({
+    text    = "Key Aim Lock",
+    state   = false,
+    flag    = "AimlockEnabled",
+    tooltip = "Toggle the aim lock",
+    callback= function(on)
+        if on then StartAimlock() else StopAimlock() end
+    end
+})
+:AddBind({
+    text     = "Toggle Aim Lock",
+    mode     = "toggle",
+    bind     = "NONE",
+    flag     = "ToggleKey_1",
+    callback = function(on)
+        if on then StartAimlock() else StopAimlock() end
+    end
+})
+
+-- Autoshoot Toggle
+secaim:AddToggle({
+    text    = "Auto Shoot",
+    state   = false,
+    flag    = "AutoShoot",
+    tooltip = "Automatically shoot when targeting",
+    callback= function(on)
+        if not on then
+            mouse1release()
+        end
+    end
+})
+
+secaim:AddToggle({
+    text    = "Team Check",
+    state   = false,
+    flag    = "TeamCheck",
+    tooltip = "Don't target teammates",
+    callback= function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddToggle({
+    text    = "Wall Check",
+    state   = false,
+    flag    = "WallCheck",
+    tooltip = "Don't target through walls",
+    callback= function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddToggle({
+    text    = "ForceField Check",
+    state   = false,
+    flag    = "ForceFieldCheck",
+    tooltip = "Don't target invulnerable players",
+    callback= function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddToggle({
+    text    = "Sticky Aim",
+    state   = false,
+    flag    = "StickyAim",
+    tooltip = "Makes your aim stick to targets"
+})
+
+secaim:AddList({
+    text     = "Aim Lock Method",
+    selected = "Camera",
+    values   = {"Camera","Mouse"},
+    flag     = "AimMethod",
+    tooltip  = "Choose aim method",
+    callback = function()
+        UpdateFOVPosition()
+        SetupFOVTracking()
+        CurrentTarget, CurrentTargetPart = nil, nil
+    end
+})
+
+secaim:AddList({
+    text     = "Target Body Parts",
+    selected = {"Head"},
+    multi    = true,
+    values   = TargetPartOptions,
+    flag     = "TargetParts",
+    tooltip  = "Which body parts to aim at",
+    callback = function() CurrentTarget, CurrentTargetPart = nil, nil end
+})
+
+secaim:AddSeparator({ text = "Misc" })
+
+secaim:AddSlider({
+    text      = "Mouse Smoothness",
+    min       = 0,
+    max       = 1.0,
+    increment = 0.05,
+    default   = 0,
+    flag      = "Smoothness",
+    tooltip   = "Higher = smoother"
+})
+
+secaim:AddSlider({
+    text      = "FOV Size",
+    min       = 50,
+    max       = 500,
+    increment = 1,
+    default   = 100,
+    suffix    = "px",
+    flag      = "FOVSize",
+    tooltip   = "Aim FOV radius",
+    callback  = function(v)
+        FOVCircle.Radius = v
+        CurrentTarget, CurrentTargetPart = nil, nil
+    end
+})
+
+secaim:AddSeparator({ text = "Prediction" })
+
+secaim:AddList({
+    text     = "Prediction Mode",
+    selected = "Off",
+    values   = {"Off","Manual","Auto"},
+    flag     = "PredictionMode",
+    tooltip  = "Aim prediction"
+})
+
+secaim:AddSlider({
+    text      = "Manual Prediction",
+    min       = 0,
+    max       = 0.5,
+    increment = 0.01,
+    default   = 0,
+    flag      = "ManualPrediction",
+    tooltip   = "Manual prediction strength"
+})
+
+local secedit = _G.Aimlock:AddSection("Customize", 1)
+
+secedit:AddSeparator({ text = "Colors" })
+secedit:AddColor({
+    text     = "FOV Circle Color",
+    color    = Color3.new(1,1,1),
+    trans    = 0.5,
+    flag     = "FOVColor",
+    tooltip  = "Circle color/transparency",
+    callback = function(c,t)
+        FOVCircle.Color        = c
+        FOVCircle.Transparency = FixTransparency(t)
+    end
+})
+secedit:AddColor({
+    text     = "Indicator Color",
+    color    = Color3.new(1,1,1),
+    trans    = 0.5,
+    flag     = "IndicatorColor",
+    tooltip  = "Indicator color/transparency",
+    callback = function(c,t)
+        TargetIndicator.Color        = c
+        TargetIndicator.Transparency = FixTransparency(t)
+    end
+})
+
+-- ===================== SILENT AIM SECTION =====================
+local Camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local GetPlayers = Players.GetPlayers
+local WorldToScreen = Camera.WorldToScreenPoint
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPartsObscuringTarget = Camera.GetPartsObscuringTarget
+local FindFirstChild = game.FindFirstChild
+local RenderStepped = RunService.RenderStepped
+local GetMouseLocation = UserInputService.GetMouseLocation
+
+local resume = coroutine.resume 
+local create = coroutine.create
+
+-- Performance optimization: Cache mouse position
+local CachedMousePosition = Vector2.new(0, 0)
+local LastMouseUpdate = 0
+local MOUSE_UPDATE_INTERVAL = 0.016 -- ~60 FPS
+
+-- Performance optimization: Cache closest player
+local CachedClosestPlayer = nil
+local LastPlayerUpdate = 0
+local PLAYER_UPDATE_INTERVAL = 0.033 -- ~30 FPS
+
+-- Drawing Objects
+local fov_circle = Drawing.new("Circle")
+fov_circle.Thickness = 1
+fov_circle.NumSides = 100
+fov_circle.Radius = 50
+fov_circle.Filled = false
+fov_circle.Visible = false
+fov_circle.ZIndex = 999
+fov_circle.Transparency = 1
+fov_circle.Color = Color3.fromRGB(54, 57, 241)
+
+local SilentTargetIndicator = Drawing.new("Circle")
+SilentTargetIndicator.Thickness = 2
+SilentTargetIndicator.NumSides = 4
+SilentTargetIndicator.Radius = 5
+SilentTargetIndicator.Color = Color3.new(1,1,1)
+SilentTargetIndicator.Transparency = 0.5
+SilentTargetIndicator.Visible = false
+
+-- Expected Arguments for hooking - EXPANDED TO INCLUDE MORE METHODS
+local ExpectedArguments = {
+    FindPartOnRayWithIgnoreList = {
+        ArgCountRequired = 3,
+        Args = {
+            "Instance", "Ray", "table", "boolean", "boolean"
+        }
+    },
+    FindPartOnRayWithWhitelist = {
+        ArgCountRequired = 3,
+        Args = {
+            "Instance", "Ray", "table", "boolean"
+        }
+    },
+    FindPartOnRay = {
+        ArgCountRequired = 2,
+        Args = {
+            "Instance", "Ray", "Instance", "boolean", "boolean"
+        }
+    },
+    Raycast = {
+        ArgCountRequired = 3,
+        Args = {
+            "Instance", "Vector3", "Vector3", "RaycastParams"
+        }
+    }
+}
+
+-- Target parts mapping for multi-selection
+local TARGET_PARTS = {
+    Head = {"Head"},
+    Torso = {"HumanoidRootPart"},
+    Legs = {"Left Leg", "LeftUpperLeg"}
+}
+
+-- Utility Functions
+-- Utility Functions
+function CalculateChance(Percentage)
+    Percentage = math.floor(Percentage)
+    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
+    return chance <= Percentage / 100
+end
+
+local function getPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Camera, Vector)
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+
+local function ValidateArguments(Args, RayMethod)
+    local Matches = 0
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
+    for Pos, Argument in next, Args do
+        if typeof(Argument) == RayMethod.Args[Pos] then
+            Matches = Matches + 1
+        end
+    end
+    return Matches >= RayMethod.ArgCountRequired
+end
+
+local function getDirection(Origin, Position)
+    return (Position - Origin).Unit * 1000
+end
+
+-- Optimized mouse position function with caching
+local function getMousePosition()
+    local currentTime = tick()
+    if currentTime - LastMouseUpdate > MOUSE_UPDATE_INTERVAL then
+        CachedMousePosition = GetMouseLocation(UserInputService)
+        LastMouseUpdate = currentTime
+    end
+    return CachedMousePosition
+end
+
+local function IsPlayerVisible(Player)
+    local PlayerCharacter = Player.Character
+    local LocalPlayerCharacter = LocalPlayer.Character
+    
+    if not (PlayerCharacter or LocalPlayerCharacter) then return end 
+    
+    local PlayerRoot = FindFirstChild(PlayerCharacter, "Head") or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+    
+    if not PlayerRoot then return end 
+    
+    local CastPoints, IgnoreList = {PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter}, {LocalPlayerCharacter, PlayerCharacter}
+    local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+    
+    return ((ObscuringObjects == 0 and true) or (ObscuringObjects > 0 and false))
+end
+
+-- Function to get selected target parts
+local function getSelectedTargetParts()
+    local selectedParts = {}
+    local selectedBodyParts = library.flags["SilentTargetParts"] or {"Head"}
+    
+    -- Add parts based on selection
+    for _, bodyPart in ipairs(selectedBodyParts) do
+        if TARGET_PARTS[bodyPart] then
+            for _, part in ipairs(TARGET_PARTS[bodyPart]) do
+                table.insert(selectedParts, part)
+            end
+        end
+    end
+    
+    -- If no parts selected, default to Head
+    if #selectedParts == 0 then
+        selectedParts = TARGET_PARTS.Head
+    end
+    
+    return selectedParts
+end
+
+-- Function to get random target part from character
+local function getTargetPart(Character)
+    local selectedParts = getSelectedTargetParts()
+    
+    -- Try to find available parts from selected ones
+    local availableParts = {}
+    for _, partName in ipairs(selectedParts) do
+        local part = FindFirstChild(Character, partName)
+        if part then
+            table.insert(availableParts, part)
+        end
+    end
+    
+    -- Return random available part or fallback to HumanoidRootPart
+    if #availableParts > 0 then
+        return availableParts[math.random(1, #availableParts)]
+    else
+        return FindFirstChild(Character, "HumanoidRootPart")
+    end
+end
+
+-- Optimized closest player function with caching
+local function getClosestPlayer()
+    local currentTime = tick()
+    
+    -- Use cached result if within update interval
+    if currentTime - LastPlayerUpdate < PLAYER_UPDATE_INTERVAL and CachedClosestPlayer then
+        return CachedClosestPlayer
+    end
+    
+    local Closest
+    local DistanceToMouse
+    local mousePos = getMousePosition()
+    
+    for _, Player in next, GetPlayers(Players) do
+        if Player == LocalPlayer then continue end
+        if library.flags["SilentTeamCheck"] and Player.Team == LocalPlayer.Team then continue end
+
+        local Character = Player.Character
+        if not Character then continue end
+        
+        if library.flags["SilentVisibleCheck"] and not IsPlayerVisible(Player) then continue end
+
+        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+        local Humanoid = FindFirstChild(Character, "Humanoid")
+        if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+
+        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        if not OnScreen then continue end
+
+        local Distance = (mousePos - ScreenPosition).Magnitude
+        if Distance <= (DistanceToMouse or library.flags["SilentFOVSize"] or 50) then
+            Closest = getTargetPart(Character)
+            DistanceToMouse = Distance
+        end
+    end
+    
+    -- Update cache
+    CachedClosestPlayer = Closest
+    LastPlayerUpdate = currentTime
+    
+    return Closest
+end
+
+-- Function to update FOV visibility
+local function updateFOVVisibility()
+    fov_circle.Visible = library.flags["SilentAimEnabled"]
+end
+
+-- UI Creation - Add to existing Aimlock tab
+local SilentAimSection = _G.Aimlock:AddSection("Silent Aim", 2)
+
+SilentAimSection:AddSeparator({ text = "Main" })
+
+SilentAimSection:AddToggle({
+    text = "Enabled",
+    state = false,
+    flag = "SilentAimEnabled",
+    callback = function(state)
+        updateFOVVisibility()
+        if library.flags["SilentShowIndicator"] then
+            SilentTargetIndicator.Visible = state
+        end
+        -- Clear cache when toggling
+        CachedClosestPlayer = nil
+    end
+}):AddBind({
+    text = "Toggle Silent Aim",
+    mode = "toggle",
+    bind = "NONE",
+    flag = "SilentAimToggleKey",
+    callback = function(state)
+        updateFOVVisibility()
+        if library.flags["SilentShowIndicator"] then
+            SilentTargetIndicator.Visible = state
+        end
+        -- Clear cache when toggling
+        CachedClosestPlayer = nil
+    end
+})
+
+SilentAimSection:AddToggle({
+    text = "Team Check",
+    state = false,
+    flag = "SilentTeamCheck",
+    callback = function()
+        CachedClosestPlayer = nil -- Clear cache when settings change
+    end
+})
+
+SilentAimSection:AddToggle({
+    text = "Visible Check",
+    state = false,
+    flag = "SilentVisibleCheck",
+    callback = function()
+        CachedClosestPlayer = nil -- Clear cache when settings change
+    end
+})
+
+-- FIXED: Added proper line break and simplified target selection
+SilentAimSection:AddList({
+    text = "Target Parts",
+    selected = "Head",
+    multi = true,
+    values = {"Head", "Torso", "Legs"},
+    flag = "SilentTargetParts",
+    callback = function()
+        CachedClosestPlayer = nil
+    end
+})
+
+-- UPDATED: All available methods
+SilentAimSection:AddList({
+    text = "Silent Aim Method",
+    selected = "Raycast",
+    values = {
+        "Raycast",
+        "FindPartOnRayWithIgnoreList",
+        "FindPartOnRayWithWhitelist",
+        "FindPartOnRay",
+        "All Methods"
+    },
+    flag = "SilentMethod"
+})
+
+SilentAimSection:AddSlider({
+    text = "Hit Chance",
+    min = 0,
+    max = 100,
+    increment = 1,
+    default = 100,
+    suffix = "%",
+    flag = "SilentHitChance"
+})
+
+-- Customize Section for Silent Aim
+local SilentCustomizeSection = _G.Aimlock:AddSection("Silent Aim Customize", 2)
+
+SilentCustomizeSection:AddSeparator({ text = "Field Of View" })
+
+SilentCustomizeSection:AddSlider({
+    text = "FOV Size",
+    min = 0,
+    max = 360,
+    increment = 1,
+    default = 50,
+    suffix = "px",
+    flag = "SilentFOVSize",
+    callback = function(value)
+        fov_circle.Radius = value
+        CachedClosestPlayer = nil -- Clear cache when FOV changes
+    end
+})
+
+SilentCustomizeSection:AddColor({
+    text = "FOV Circle Color",
+    color = Color3.fromRGB(54, 57, 241),
+    trans = 0,
+    flag = "SilentFOVColor",
+    callback = function(color, trans)
+        fov_circle.Color = color
+        fov_circle.Transparency = 1 - trans
+    end
+})
+
+SilentCustomizeSection:AddSeparator({ text = "Target Indicator" })
+
+SilentCustomizeSection:AddToggle({
+    text = "Show Target Indicator",
+    state = false,
+    flag = "SilentShowIndicator",
+    callback = function(state)
+        SilentTargetIndicator.Visible = state and library.flags["SilentAimEnabled"]
+    end
+})
+
+SilentCustomizeSection:AddColor({
+    text = "Indicator Color",
+    color = Color3.new(1,1,1),
+    trans = 0.5,
+    flag = "SilentIndicatorColor",
+    callback = function(color, trans)
+        SilentTargetIndicator.Color = color
+        SilentTargetIndicator.Transparency = 1 - trans
+    end
+})
+
+-- Optimized Render Loop with reduced frequency
+local lastRenderTime = 0
+local RENDER_INTERVAL = 0.016 -- ~60 FPS cap
+
+resume(create(function()
+    RenderStepped:Connect(function()
+        local currentTime = tick()
+        
+        -- Limit render frequency
+        if currentTime - lastRenderTime < RENDER_INTERVAL then
+            return
+        end
+        lastRenderTime = currentTime
+        
+        if library.flags["SilentShowIndicator"] and library.flags["SilentAimEnabled"] then
+            local target = getClosestPlayer()
+            if target then 
+                local Root = target.Parent.PrimaryPart or target
+                local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
+                
+                SilentTargetIndicator.Visible = IsOnScreen
+                SilentTargetIndicator.Position = Vector2.new(RootToViewportPoint.X, RootToViewportPoint.Y)
+            else 
+                SilentTargetIndicator.Visible = false 
+            end
+        else
+            SilentTargetIndicator.Visible = false
+        end
+        
+        -- Updated FOV circle logic - always show when Silent Aim is enabled
+        if library.flags["SilentAimEnabled"] then 
+            fov_circle.Visible = true
+            fov_circle.Position = getMousePosition()
+        else
+            fov_circle.Visible = false
+        end
+    end)
+end))
+
+-- UPDATED HOOKS - All methods including index hooks
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
+    local Method = getnamecallmethod()
+    local Arguments = {...}
+    local self = Arguments[1]
+    local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
+    
+    if library.flags["SilentAimEnabled"] and self == workspace and not checkcaller() and chance == true then
+        local silentMethod = library.flags["SilentMethod"]
+        
+        if (Method == "FindPartOnRayWithIgnoreList" and (silentMethod == Method or silentMethod == "All Methods")) then
+            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
                 end
             end
-        elseif data.Skeleton then
-            for _, line in pairs(data.Skeleton) do
-                line.Visible = false
+        elseif (Method == "FindPartOnRayWithWhitelist" and (silentMethod == Method or silentMethod == "All Methods")) then
+            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        elseif (Method == "FindPartOnRay" and (silentMethod == Method or silentMethod == "All Methods")) then
+            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
+                local A_Ray = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local Origin = A_Ray.Origin
+                    local Direction = getDirection(Origin, HitPart.Position)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
+                end
+            end
+        elseif (Method == "Raycast" and (silentMethod == Method or silentMethod == "All Methods")) then
+            if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                local A_Origin = Arguments[2]
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    Arguments[3] = getDirection(A_Origin, HitPart.Position)
+                    return oldNamecall(unpack(Arguments))
+                end
             end
         end
+    end
+    return oldNamecall(...)
+end))
 
-        if ShowTracers.state and data.Tracer then
-            local ScreenBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-            data.Tracer.From = ScreenBottom
-            data.Tracer.To = Vector2.new(Pos.X, Pos.Y)
-            data.Tracer.Color = ESPSettings.TracerColor
-            data.Tracer.Thickness = ESPSettings.TracerThickness
-            data.Tracer.Visible = OnScreen
-        elseif data.Tracer then
-            data.Tracer.Visible = false
+-- Index hook for additional methods
+local oldIndex
+oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+    if library.flags["SilentAimEnabled"] and not checkcaller() then
+        local silentMethod = library.flags["SilentMethod"]
+        
+        if key == "Hit" and (silentMethod == "Mouse.Hit" or silentMethod == "All Methods") then
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                return HitPart.CFrame
+            end
+        elseif key == "Target" and (silentMethod == "Mouse.Target" or silentMethod == "All Methods") then
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                return HitPart
+            end
+        elseif key == "UnitRay" and (silentMethod == "Mouse.UnitRay" or silentMethod == "All Methods") then
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                return Ray.new(Camera.CFrame.Position, (HitPart.Position - Camera.CFrame.Position).Unit)
+            end
         end
     end
+    return oldIndex(self, key)
+end))
 
-    if ShouldCheckVisibility then
-        LastVisibilityCheck = CurrentTime
+-- Alternative method using GetMouseLocation hook
+local oldGetMouseLocation
+oldGetMouseLocation = hookfunction(UserInputService.GetMouseLocation, function(...)
+    if library.flags["SilentAimEnabled"] and library.flags["SilentMethod"] == "GetMouseLocation" then
+        local HitPart = getClosestPlayer()
+        if HitPart then
+            local Vec3, OnScreen = WorldToViewportPoint(Camera, HitPart.Position)
+            if OnScreen then
+                return Vector2.new(Vec3.X, Vec3.Y)
+            end
+        end
     end
+    return oldGetMouseLocation(...)
 end)
-
--- Periodic update (only when needed)
-local LastSettingsUpdate = 0
-local SettingsUpdateInterval = 1 -- Update settings every 1 second if changed
-
-RunService.Heartbeat:Connect(function()
-    local CurrentTime = tick()
-    if CurrentTime - LastSettingsUpdate >= SettingsUpdateInterval then
-        UpdateAllESPSettings()
-        LastSettingsUpdate = CurrentTime
-    end
-end)
-
-_G.CROW:SendNotification("ESP initialized successfully!", 5)
