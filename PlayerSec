@@ -11,7 +11,7 @@ local TweenService = game:GetService("TweenService")
 -- Player References
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character and character:WaitForChild("Humanoid", 5)
+local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 local camera = workspace.CurrentCamera
 
 -- Validation checks
@@ -38,31 +38,36 @@ local originalLighting = {
     fog = Lighting.FogEnd,
     shadowSoftness = Lighting.ShadowSoftness,
     time = Lighting.TimeOfDay,
-    globalShadows = Lighting.GlobalShadows
+    globalShadows = Lighting.GlobalShadows,
+    clockTime = Lighting.ClockTime
 }
 
 -- Detect Jump Property
 local jumpPropertyName = ""
 local jumpValue, jumpMin, jumpMax, jumpMultiplier
+local originalJumpValue = 0
 
 local function detectJumpProperty()
     if not humanoid then return end
     
     if pcall(function() return humanoid.JumpPower end) then
         jumpPropertyName = "JumpPower"
-        jumpValue = humanoid.JumpPower
+        jumpValue = humanoid.JumpPower > 0 and humanoid.JumpPower or 50
+        originalJumpValue = jumpValue
         jumpMin = jumpValue
         jumpMax = jumpValue * 3
         jumpMultiplier = 1
     elseif pcall(function() return humanoid.JumpHeight end) then
         jumpPropertyName = "JumpHeight"
-        jumpValue = humanoid.JumpHeight
+        jumpValue = humanoid.JumpHeight > 0 and humanoid.JumpHeight or 7.2
+        originalJumpValue = jumpValue
         jumpMin = jumpValue
         jumpMax = jumpValue * 2
         jumpMultiplier = 0.5
     else
         jumpPropertyName = "JumpPower"
         jumpValue = 50
+        originalJumpValue = 50
         jumpMin = jumpValue
         jumpMax = jumpValue * 3
         jumpMultiplier = 1
@@ -71,14 +76,20 @@ end
 
 detectJumpProperty()
 
+-- Store original values
+local originalValues = {
+    walkSpeed = speedValue,
+    jumpValue = originalJumpValue,
+    fov = originalFov
+}
+
 -- States
 local states = {
     speedEnabled = false,
     jumpEnabled = false,
     fovEnabled = false,
     noclipEnabled = false,
-    fullbrightEnabled = false,
-    flyEnabled = false
+    fullbrightEnabled = false
 }
 
 -- Movement State Tracking
@@ -98,8 +109,25 @@ local function trackConnection(connection, metadata)
     return connection
 end
 
+local function cleanupConnections(connectionType)
+    for i = #connections, 1, -1 do
+        local conn = connections[i]
+        if type(conn) == "table" then
+            if not connectionType or conn.type == connectionType then
+                if conn.connection and conn.connection.Connected then
+                    conn.connection:Disconnect()
+                end
+                table.remove(connections, i)
+            end
+        elseif type(conn) == "userdata" and conn.Connected then
+            conn:Disconnect()
+            table.remove(connections, i)
+        end
+    end
+end
+
 -- Forward declarations for toggle functions
-local toggleSpeed, toggleJump, toggleFOV, toggleFullBright, toggleNoclip, toggleFly
+local toggleSpeed, toggleJump, toggleFOV, toggleFullBright, toggleNoclip
 
 -- Character Setup (called when character spawns or respawns)
 local function setupCharacter(char)
@@ -109,50 +137,38 @@ local function setupCharacter(char)
     character = char
     
     -- Wait for humanoid to be available with timeout
-    local waitTime = 0
-    local maxWaitTime = 5
+    humanoid = char:WaitForChild("Humanoid", 5)
     
-    while not character:FindFirstChild("Humanoid") and waitTime < maxWaitTime do
-        task.wait(0.1)
-        waitTime = waitTime + 0.1
-    end
-    
-    humanoid = character:FindFirstChild("Humanoid")
     if not humanoid then
         warn("Failed to find Humanoid after character respawn")
         return
     end
     
-    -- Set default values
-    if humanoid.WalkSpeed == 0 then
+    -- Store original values for new character
+    if humanoid.WalkSpeed > 0 then
+        originalValues.walkSpeed = humanoid.WalkSpeed
+    else
         humanoid.WalkSpeed = 16
+        originalValues.walkSpeed = 16
     end
     
     -- Re-detect jump property for new character
     detectJumpProperty()
-    
-    if jumpPropertyName ~= "" then
-        -- Set jump property
-        if pcall(function() return humanoid[jumpPropertyName] end) then
-            humanoid[jumpPropertyName] = states.jumpEnabled and jumpValue or jumpMin
-        end
-    end
+    originalValues.jumpValue = originalJumpValue
     
     -- Reapply active states with a slight delay to ensure properties exist
     task.spawn(function()
-        task.wait(0.2)
+        task.wait(0.5)
         if states.speedEnabled then toggleSpeed(true) end
         if states.jumpEnabled then toggleJump(true) end
         if states.noclipEnabled then toggleNoclip(true) end
-        if states.flyEnabled then toggleFly(true) end
     end)
 end
 
 -- Movement Methods
 local movementMethods = {
     ["CFrame"] = function()
-        if not character or not character:FindFirstChild("Humanoid") then return end
-        local humanoid = character:FindFirstChild("Humanoid")
+        if not character or not humanoid then return end
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return end
         
@@ -172,32 +188,26 @@ local movementMethods = {
         
         -- Apply jump enhancement for CFrame method
         if states.jumpEnabled and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
-            local rootPart = character:FindFirstChild("HumanoidRootPart")
-            if rootPart then
-                local jumpVelocity = rootPart.Velocity + Vector3.new(0, jumpValue * 0.5, 0)
-                rootPart.Velocity = jumpVelocity
-            end
+            rootPart.Velocity = rootPart.Velocity + Vector3.new(0, jumpValue * 0.5, 0)
         end
     end,
     
     ["Normal"] = function()
-        if not character or not character:FindFirstChild("Humanoid") then return end
-        local humanoid = character:FindFirstChild("Humanoid")
+        if not character or not humanoid then return end
         
         if states.speedEnabled then
             humanoid.WalkSpeed = speedValue
         end
         
         if states.jumpEnabled and jumpPropertyName ~= "" then
-            if pcall(function() return humanoid[jumpPropertyName] end) then
+            pcall(function()
                 humanoid[jumpPropertyName] = jumpValue
-            end
+            end)
         end
     end,
     
     ["Velocity"] = function()
-        if not character or not character:FindFirstChild("Humanoid") then return end
-        local humanoid = character:FindFirstChild("Humanoid")
+        if not character or not humanoid then return end
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return end
         
@@ -222,8 +232,7 @@ local movementMethods = {
     end,
     
     ["BodyVelocity"] = function()
-        if not character or not character:FindFirstChild("Humanoid") then return end
-        local humanoid = character:FindFirstChild("Humanoid")
+        if not character or not humanoid then return end
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return end
         
@@ -270,8 +279,7 @@ local movementMethods = {
     end,
     
     ["Impulse"] = function()
-        if not character or not character:FindFirstChild("Humanoid") then return end
-        local humanoid = character:FindFirstChild("Humanoid")
+        if not character or not humanoid then return end
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return end
         
@@ -281,11 +289,20 @@ local movementMethods = {
             local deltaTime = RunService.Heartbeat:Wait()
             local impulseForce = normalizedDir * speedValue * deltaTime * 20
             
-            rootPart:ApplyImpulse(impulseForce)
+            -- Use AssemblyLinearVelocity for newer Roblox versions
+            if rootPart.AssemblyLinearVelocity then
+                rootPart.AssemblyLinearVelocity = rootPart.AssemblyLinearVelocity + impulseForce
+            else
+                rootPart.Velocity = rootPart.Velocity + impulseForce
+            end
         end
         
         if states.jumpEnabled and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
-            rootPart:ApplyImpulse(Vector3.new(0, jumpValue * 15, 0))
+            if rootPart.AssemblyLinearVelocity then
+                rootPart.AssemblyLinearVelocity = rootPart.AssemblyLinearVelocity + Vector3.new(0, jumpValue * 15, 0)
+            else
+                rootPart.Velocity = rootPart.Velocity + Vector3.new(0, jumpValue * 15, 0)
+            end
         end
     end
 }
@@ -308,6 +325,7 @@ end
 -- FOV watcher - ensures FOV is always at the correct value
 local function watchFOV()
     if not camera then return end
+    cleanupConnections("fov_watcher")
     trackConnection(camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
         if states.fovEnabled and camera.FieldOfView ~= fovValue then
             camera.FieldOfView = fovValue
@@ -315,7 +333,12 @@ local function watchFOV()
     end), "fov_watcher")
 end
 
-RunService.Stepped:Connect(function()
+local function enableNoclip()
+    if not character then return end
+    
+    cleanupConnections("noclip")
+    
+    local connection = RunService.Stepped:Connect(function()
         if not character or not character.Parent then return end
         
         for _, part in pairs(character:GetDescendants()) do
@@ -323,27 +346,25 @@ RunService.Stepped:Connect(function()
                 part.CanCollide = false
             end
         end
-    end), "noclip")
+    end)
+    
+    trackConnection(connection, "noclip")
     
     -- Also handle accessories and tools
-    trackConnection(character.DescendantAdded:Connect(function(descendant)
+    local descendantConnection = character.DescendantAdded:Connect(function(descendant)
         if states.noclipEnabled and descendant:IsA("BasePart") and descendant ~= character:FindFirstChild("HumanoidRootPart") then
             descendant.CanCollide = false
         end
-    end), "noclip_descendant")
+    end)
+    
+    trackConnection(descendantConnection, "noclip")
 end
 
 local function disableNoclip()
     if not character then return end
     
     -- Remove noclip connections
-    for i = #connections, 1, -1 do
-        local conn = connections[i]
-        if type(conn) == "table" and (conn.type == "noclip" or conn.type == "noclip_descendant") then
-            conn.connection:Disconnect()
-            table.remove(connections, i)
-        end
-    end
+    cleanupConnections("noclip")
     
     -- Restore collision
     for _, part in pairs(character:GetDescendants()) do
@@ -355,7 +376,7 @@ end
 
 -- Optimized property enforcement with throttling
 local lastPropertyUpdate = 0
-local PROPERTY_UPDATE_INTERVAL = 0.05 -- Update every 0.05 seconds
+local PROPERTY_UPDATE_INTERVAL = 1/30 -- 30 FPS for property updates
 
 local function enforceProperties()
     local now = tick()
@@ -366,9 +387,9 @@ local function enforceProperties()
     if not character or not character.Parent then
         character = player.Character
         if not character then return end
+        humanoid = character:FindFirstChildOfClass("Humanoid")
     end
     
-    local humanoid = character:FindFirstChild("Humanoid")
     if not humanoid then return end
     
     -- FOV enforcement (only if different)
@@ -392,7 +413,7 @@ local function enforceProperties()
     end
     
     -- FullBright enforcement (reduced frequency)
-    if states.fullbrightEnabled and now % 0.2 < PROPERTY_UPDATE_INTERVAL then
+    if states.fullbrightEnabled then
         if Lighting.Brightness ~= 2 then Lighting.Brightness = 2 end
         if Lighting.ClockTime ~= 14 then Lighting.ClockTime = 14 end
         if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
@@ -408,21 +429,14 @@ local function toggleMovement(state)
     states.speedEnabled = state
     
     -- Clean up previous movement connections
-    for i = #connections, 1, -1 do
-        local conn = connections[i]
-        if type(conn) == "table" and conn.type == "movement" then
-            conn.connection:Disconnect()
-            table.remove(connections, i)
-        end
-    end
-    
+    cleanupConnections("movement")
     cleanupMovementMethod("all")
     
     if state then
         trackConnection(RunService.Heartbeat:Connect(movementMethods[currentMovementMethod]), "movement")
     else
-        if character and character:FindFirstChild("Humanoid") then
-            character:FindFirstChild("Humanoid").WalkSpeed = 16
+        if humanoid then
+            humanoid.WalkSpeed = originalValues.walkSpeed
         end
     end
 end
@@ -431,18 +445,18 @@ toggleSpeed = function(state)
     states.speedEnabled = state
     toggleMovement(state)
     
-    if character and character:FindFirstChild("Humanoid") then
-        character:FindFirstChild("Humanoid").WalkSpeed = state and speedValue or 16
+    if humanoid then
+        humanoid.WalkSpeed = state and speedValue or originalValues.walkSpeed
     end
 end
 
 toggleJump = function(state)
     states.jumpEnabled = state
     
-    if character and character:FindFirstChild("Humanoid") and jumpPropertyName ~= "" then
-        if pcall(function() return character:FindFirstChild("Humanoid")[jumpPropertyName] end) then
-            character:FindFirstChild("Humanoid")[jumpPropertyName] = state and jumpValue or jumpMin
-        end
+    if humanoid and jumpPropertyName ~= "" then
+        pcall(function()
+            humanoid[jumpPropertyName] = state and jumpValue or originalValues.jumpValue
+        end)
     end
 end
 
@@ -453,11 +467,11 @@ toggleFOV = function(state)
     
     if state then
         camera.FieldOfView = fovValue
+        watchFOV()
     else
-        camera.FieldOfView = originalFov
+        camera.FieldOfView = originalValues.fov
+        cleanupConnections("fov_watcher")
     end
-    
-    watchFOV()
 end
 
 toggleNoclip = function(state)
@@ -470,28 +484,13 @@ toggleNoclip = function(state)
     end
 end
 
-toggleFly = function(state)
-    states.flyEnabled = state
-    
-    if state then
-        enableFly()
-    else
-        disableFly()
-    end
-end
-
 toggleFullBright = function(state)
     states.fullbrightEnabled = state
     
-    for i = #connections, 1, -1 do
-        local conn = connections[i]
-        if type(conn) == "table" and conn.type == "fullbright" then
-            conn.connection:Disconnect()
-            table.remove(connections, i)
-        end
-    end
+    cleanupConnections("fullbright")
     
     if state then
+        -- Store current lighting values before changing
         originalLighting = {
             brightness = Lighting.Brightness,
             ambient = Lighting.Ambient,
@@ -499,7 +498,8 @@ toggleFullBright = function(state)
             fog = Lighting.FogEnd,
             shadowSoftness = Lighting.ShadowSoftness,
             time = Lighting.TimeOfDay,
-            globalShadows = Lighting.GlobalShadows
+            globalShadows = Lighting.GlobalShadows,
+            clockTime = Lighting.ClockTime
         }
         
         Lighting.Brightness = 2
@@ -507,21 +507,16 @@ toggleFullBright = function(state)
         Lighting.FogEnd = 100000
         Lighting.GlobalShadows = false
         Lighting.Ambient = Color3.fromRGB(178, 178, 178)
-        
-        trackConnection(RunService.Heartbeat:Connect(function()
-            Lighting.Brightness = 2
-            Lighting.ClockTime = 14
-            Lighting.FogEnd = 100000
-            Lighting.GlobalShadows = false
-        end), "fullbright")
     else
-        Lighting.Brightness = originalLighting.brightness
-        Lighting.Ambient = originalLighting.ambient
-        Lighting.ColorShift_Top = originalLighting.colorShift
-        Lighting.FogEnd = originalLighting.fog
-        Lighting.ShadowSoftness = originalLighting.shadowSoftness
-        Lighting.TimeOfDay = originalLighting.time
-        Lighting.GlobalShadows = originalLighting.globalShadows
+        -- Restore all original lighting values
+        pcall(function() Lighting.Brightness = originalLighting.brightness end)
+        pcall(function() Lighting.Ambient = originalLighting.ambient end)
+        pcall(function() Lighting.ColorShift_Top = originalLighting.colorShift end)
+        pcall(function() Lighting.FogEnd = originalLighting.fog end)
+        pcall(function() Lighting.ShadowSoftness = originalLighting.shadowSoftness end)
+        pcall(function() Lighting.TimeOfDay = originalLighting.time end)
+        pcall(function() Lighting.GlobalShadows = originalLighting.globalShadows end)
+        pcall(function() Lighting.ClockTime = originalLighting.clockTime end)
     end
 end
 
@@ -546,29 +541,20 @@ watchFOV()
 
 -- Cleanup Function
 local function cleanupStats()
-    for i = #connections, 1, -1 do
-        local conn = connections[i]
-        if type(conn) == "table" and conn.connection then
-            conn.connection:Disconnect()
-        elseif type(conn) == "userdata" then
-            conn:Disconnect()
-        end
-        table.remove(connections, i)
-    end
-    
+    cleanupConnections()
     cleanupMovementMethod("all")
     
-    if character and character:FindFirstChild("Humanoid") then
-        character:FindFirstChild("Humanoid").WalkSpeed = 16
+    if humanoid then
+        humanoid.WalkSpeed = originalValues.walkSpeed
         if jumpPropertyName ~= "" then
-            if pcall(function() return character:FindFirstChild("Humanoid")[jumpPropertyName] end) then
-                character:FindFirstChild("Humanoid")[jumpPropertyName] = jumpMin
-            end
+            pcall(function()
+                humanoid[jumpPropertyName] = originalValues.jumpValue
+            end)
         end
     end
     
     if camera then
-        camera.FieldOfView = originalFov
+        camera.FieldOfView = originalValues.fov
     end
     
     if states.fullbrightEnabled then
@@ -579,16 +565,9 @@ local function cleanupStats()
         disableNoclip()
     end
     
-    if states.flyEnabled then
-        disableFly()
+    for key, _ in pairs(states) do
+        states[key] = false
     end
-    
-    states.speedEnabled = false
-    states.jumpEnabled = false
-    states.fovEnabled = false
-    states.noclipEnabled = false
-    states.fullbrightEnabled = false
-    states.flyEnabled = false
 end
 
 -- UI ELEMENTS
@@ -613,9 +592,9 @@ local speedSlider = secplayer:AddSlider({
     default = speedValue,
     callback = function(v)
         speedValue = v
-        if states.speedEnabled and character and character:FindFirstChild("Humanoid") then
+        if states.speedEnabled and humanoid then
             if currentMovementMethod == "Normal" then
-                character:FindFirstChild("Humanoid").WalkSpeed = speedValue
+                humanoid.WalkSpeed = speedValue
             end
         end
     end
@@ -649,10 +628,10 @@ local jumpSlider = secplayer:AddSlider({
     default = jumpValue,
     callback = function(v)
         jumpValue = v
-        if states.jumpEnabled and character and character:FindFirstChild("Humanoid") and jumpPropertyName ~= "" then
-            if pcall(function() return character:FindFirstChild("Humanoid")[jumpPropertyName] end) then
-                character:FindFirstChild("Humanoid")[jumpPropertyName] = jumpValue
-            end
+        if states.jumpEnabled and humanoid and jumpPropertyName ~= "" then
+            pcall(function()
+                humanoid[jumpPropertyName] = jumpValue
+            end)
         end
     end
 })
@@ -692,39 +671,6 @@ secplayer:AddToggle({
     bind = "None",
     callback = function(v)
         toggleNoclip(v)
-    end
-})
-
--- Fly Speed Slider
-local flySpeedSlider = secplayer:AddSlider({
-    text = "Fly Speed",
-    tooltip = "Adjust flying speed",
-    flag = "flyspeed",
-    min = 16,
-    max = 200,
-    increment = 1,
-    default = 50,
-    callback = function(v)
-        flySpeed = v
-    end
-})
-
--- Fly Toggle with Keybind
-secplayer:AddToggle({
-    text = "Fly",
-    state = false,
-    tooltip = "Toggle fly mode - Use WASD to move in camera direction",
-    flag = "Toggle_Fly",
-    callback = function(state)
-        toggleFly(state)
-    end
-}):AddBind({
-    text = "Fly Key",
-    tooltip = "Hotkey to toggle fly mode",
-    mode = "toggle",
-    bind = "F",
-    callback = function(v)
-        toggleFly(v)
     end
 })
 
@@ -786,87 +732,99 @@ secplayer:AddToggle({
 local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
 seccharacter:AddSeparator({ text = "Character Effects" })
 
--- State for character effects
-local characterEffects = {
-    rainbowEnabled = false,
-    customColorEnabled = false,
-    customColor = Color3.fromRGB(255, 255, 255),
-    rainbowSpeed = 1,
-    rainbowConnection = nil,
-    originalColors = {},
-    materialEnabled = false,
-    selectedMaterial = "ForceField",
-    transparencyEnabled = false,
-    transparencyValue = 0.5,
-    zigzagCounter = 1
+-- === OPTIMIZED CHARACTER CUSTOMIZER ===
+local CharacterCustomizer = {
+    -- State tracking
+    state = {
+        rainbowEnabled = false,
+        customColorEnabled = false,
+        materialEnabled = false,
+        transparencyEnabled = false,
+        glowEnabled = false,
+        outlineEnabled = false
+    },
+    
+    -- Settings
+    settings = {
+        customColor = Color3.fromRGB(255, 255, 255),
+        rainbowSpeed = 1,
+        selectedMaterial = "ForceField",
+        transparencyValue = 0.5,
+        glowColor = Color3.fromRGB(255, 255, 255),
+        glowIntensity = 1,
+        outlineColor = Color3.fromRGB(0, 0, 0),
+        outlineThickness = 0.1
+    },
+    
+    -- Storage
+    originalProperties = {},
+    partsCache = {},
+    lastCacheUpdate = 0,
+    connections = {},
+    isInitialized = false,
+    lastRainbowUpdate = 0
 }
 
--- Zigzag function for rainbow effect
-local function zigzag(X)
-    return math.acos(math.cos(X * math.pi)) / math.pi
-end
-
--- Optimized character effects with caching and throttling
-local characterPartsCache = {}
-local lastPartsUpdate = 0
-local lastRainbowUpdate = 0
-local PARTS_CACHE_INTERVAL = 0.5 -- Update parts cache every 0.5 seconds
-local RAINBOW_UPDATE_INTERVAL = 1/60 -- 60 FPS for smooth rainbow
-
--- Optimized function to get all character parts with caching
-local function getCharacterParts()
+-- Optimized part detection with caching
+function CharacterCustomizer:GetAllParts()
     local now = tick()
-    
-    -- Use cache if still valid
-    if now - lastPartsUpdate < PARTS_CACHE_INTERVAL and #characterPartsCache > 0 then
-        return characterPartsCache
+    if now - self.lastCacheUpdate < 0.5 and next(self.partsCache) then
+        return self.partsCache
     end
     
-    characterPartsCache = {}
-    lastPartsUpdate = now
+    self.partsCache = {}
     
-    if not character then return characterPartsCache end
+    if not character or not character.Parent then
+        return self.partsCache
+    end
     
-    -- Get character parts efficiently
-    for _, obj in pairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and 
-           obj.Name ~= "HumanoidRootPart" and obj.Parent then
-            table.insert(characterPartsCache, obj)
+    -- Character body parts
+    for _, part in pairs(character:GetChildren()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            table.insert(self.partsCache, part)
         end
     end
     
-    -- Get arm parts from camera
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, obj in pairs(arms:GetDescendants()) do
-            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent then
-                table.insert(characterPartsCache, obj)
+    -- Accessories
+    for _, accessory in pairs(character:GetChildren()) do
+        if accessory:IsA("Accessory") then
+            local handle = accessory:FindFirstChild("Handle")
+            if handle and handle:IsA("BasePart") then
+                table.insert(self.partsCache, handle)
             end
         end
     end
     
-    return characterPartsCache
+    -- First person arms (if present)
+    local camera = workspace.CurrentCamera
+    if camera then
+        local arms = camera:FindFirstChild("Arms")
+        if arms then
+            for _, part in pairs(arms:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    table.insert(self.partsCache, part)
+                end
+            end
+        end
+    end
+    
+    self.lastCacheUpdate = now
+    return self.partsCache
 end
 
--- Optimized function to store original properties
-local function storeOriginalColors()
-    characterEffects.originalColors = {}
-    local parts = getCharacterParts()
+-- Store original properties
+function CharacterCustomizer:StoreOriginalProperties()
+    if self.isInitialized then return end
     
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
-            characterEffects.originalColors[obj] = {
-                Color = obj.Color,
-                Material = obj.Material,
-                Transparency = obj.Transparency,
-                Reflectance = obj.Reflectance
+    local parts = self:GetAllParts()
+    
+    for _, part in pairs(parts) do
+        if part and part.Parent then
+            self.originalProperties[part] = {
+                color = part.Color,
+                material = part.Material,
+                transparency = part.Transparency
             }
-            
-            -- Store SurfaceAppearance transparency if it exists
-            local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-            if surfaceApp then
-                characterEffects.originalColors[obj].SurfaceAppearanceTransparency = surfaceApp.Transparency
-            end
         end
     end
     
@@ -874,365 +832,424 @@ local function storeOriginalColors()
     local head = character:FindFirstChild("Head")
     if head then
         local face = head:FindFirstChild("face")
-        if face and face:IsA("Decal") then
-            characterEffects.originalColors[face] = {
-                Transparency = face.Transparency
+        if face then
+            self.originalProperties[face] = {
+                transparency = face.Transparency
             }
         end
     end
+    
+    self.isInitialized = true
 end
 
--- Function to restore original properties
-local function restoreOriginalColors()
-    for obj, properties in pairs(characterEffects.originalColors) do
-        if obj and obj.Parent then
-            pcall(function()
-                if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-                    if not characterEffects.customColorEnabled and not characterEffects.rainbowEnabled then
-                        obj.Color = properties.Color
-                    end
-                    if not characterEffects.materialEnabled then
-                        obj.Material = properties.Material
-                    end
-                    if not characterEffects.transparencyEnabled then
-                        obj.Transparency = properties.Transparency
-                        obj.Reflectance = properties.Reflectance
-                        
-                        local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                        if surfaceApp and properties.SurfaceAppearanceTransparency then
-                            surfaceApp.Transparency = properties.SurfaceAppearanceTransparency
-                        end
-                    end
-                elseif obj:IsA("Decal") then
-                    if not characterEffects.transparencyEnabled then
-                        obj.Transparency = properties.Transparency
-                    end
-                end
-            end)
-        end
-    end
-end
-
--- Heavily optimized rainbow effect with throttling
-local function applyRainbowEffect()
+-- Rainbow effect with throttling
+function CharacterCustomizer:UpdateRainbow()
     local now = tick()
-    if now - lastRainbowUpdate < RAINBOW_UPDATE_INTERVAL then return end
-    lastRainbowUpdate = now
+    if now - self.lastRainbowUpdate < 1/60 then return end
+    self.lastRainbowUpdate = now
     
-    if not character then return end
+    if not self.state.rainbowEnabled then return end
     
-    local time = now * characterEffects.rainbowSpeed
-    local hue = (time % 1)
+    local hue = (now * self.settings.rainbowSpeed) % 1
     local color = Color3.fromHSV(hue, 1, 1)
     
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
             pcall(function()
-                if obj.Color ~= color then
-                    obj.Color = color
-                end
-                
-                if characterEffects.transparencyEnabled and obj.Transparency ~= characterEffects.transparencyValue then
-                    obj.Transparency = characterEffects.transparencyValue
-                    local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceApp and surfaceApp.Transparency ~= characterEffects.transparencyValue then
-                        surfaceApp.Transparency = characterEffects.transparencyValue
-                    end
-                end
-                
-                if characterEffects.materialEnabled then
-                    local targetMaterial = Enum.Material[characterEffects.selectedMaterial]
-                    if obj.Material ~= targetMaterial then
-                        obj.Material = targetMaterial
-                    end
-                end
+                part.Color = color
             end)
         end
     end
 end
 
--- Optimized function to apply custom color
-local function applyCustomColor()
-    if not character then return end
-    
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+-- Apply custom color
+function CharacterCustomizer:ApplyCustomColor()
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
             pcall(function()
-                if obj.Color ~= characterEffects.customColor then
-                    obj.Color = characterEffects.customColor
-                end
-                
-                if characterEffects.transparencyEnabled and obj.Transparency ~= characterEffects.transparencyValue then
-                    obj.Transparency = characterEffects.transparencyValue
-                    local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceApp and surfaceApp.Transparency ~= characterEffects.transparencyValue then
-                        surfaceApp.Transparency = characterEffects.transparencyValue
-                    end
-                end
-                
-                if characterEffects.materialEnabled then
-                    local targetMaterial = Enum.Material[characterEffects.selectedMaterial]
-                    if obj.Material ~= targetMaterial then
-                        obj.Material = targetMaterial
-                    end
-                end
+                part.Color = self.settings.customColor
             end)
         end
     end
 end
 
--- Optimized function to apply material
-local function applyMaterial()
-    if not character then return end
+-- Apply material
+function CharacterCustomizer:ApplyMaterial()
+    local materialEnum = Enum.Material[self.settings.selectedMaterial]
+    if not materialEnum then return end
     
-    local targetMaterial = Enum.Material[characterEffects.selectedMaterial]
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
             pcall(function()
-                if obj.Material ~= targetMaterial then
-                    obj.Material = targetMaterial
-                end
+                part.Material = materialEnum
             end)
         end
     end
 end
 
--- Optimized function to apply transparency
-local function applyTransparency()
-    if not character then return end
-    
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+-- Apply transparency
+function CharacterCustomizer:ApplyTransparency()
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
             pcall(function()
-                if obj.Transparency ~= characterEffects.transparencyValue then
-                    obj.Transparency = characterEffects.transparencyValue
-                end
-                
-                local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceApp and surfaceApp.Transparency ~= characterEffects.transparencyValue then
-                    surfaceApp.Transparency = characterEffects.transparencyValue
-                end
+                part.Transparency = self.settings.transparencyValue
             end)
         end
     end
     
-    -- Handle face transparency separately with reduced value
+    -- Handle face transparency
     local head = character:FindFirstChild("Head")
     if head then
         local face = head:FindFirstChild("face")
-        if face and face:IsA("Decal") then
+        if face then
             pcall(function()
-                local targetTransparency = math.min(characterEffects.transparencyValue * 0.7, 0.8)
-                if face.Transparency ~= targetTransparency then
-                    face.Transparency = targetTransparency
-                end
-            end)
-        end
-    end
-endA("Decal") then
-            characterEffects.originalColors[face] = {
-                Transparency = face.Transparency
-            }
-        end
-    end
-end
-
--- Function to restore original properties
-local function restoreOriginalColors()
-    for obj, properties in pairs(characterEffects.originalColors) do
-        if obj and obj.Parent then
-            pcall(function()
-                if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-                    if not characterEffects.customColorEnabled and not characterEffects.rainbowEnabled then
-                        obj.Color = properties.Color
-                    end
-                    if not characterEffects.materialEnabled then
-                        obj.Material = properties.Material
-                    end
-                    if not characterEffects.transparencyEnabled then
-                        obj.Transparency = properties.Transparency
-                        obj.Reflectance = properties.Reflectance
-                        
-                        local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                        if surfaceApp and properties.SurfaceAppearanceTransparency then
-                            surfaceApp.Transparency = properties.SurfaceAppearanceTransparency
-                        end
-                    end
-                elseif obj:IsA("Decal") then
-                    if not characterEffects.transparencyEnabled then
-                        obj.Transparency = properties.Transparency
-                    end
-                end
+                face.Transparency = self.settings.transparencyValue * 0.8
             end)
         end
     end
 end
 
--- Function to apply rainbow effect
-local function applyRainbowEffect()
-    if not character then return end
-    
-    local time = tick() * characterEffects.rainbowSpeed
-    local hue = (time % 1)
-    local color = Color3.fromHSV(hue, 1, 1)
-    
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+-- Apply glow effect
+function CharacterCustomizer:ApplyGlow()
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
             pcall(function()
-                obj.Color = color
+                -- Remove existing glow
+                local oldGlow = part:FindFirstChild("CustomGlow")
+                if oldGlow then oldGlow:Destroy() end
                 
-                if characterEffects.transparencyEnabled then
-                    obj.Transparency = characterEffects.transparencyValue
-                    local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceApp then
-                        surfaceApp.Transparency = characterEffects.transparencyValue
+                -- Add new glow
+                local light = Instance.new("PointLight")
+                light.Name = "CustomGlow"
+                light.Color = self.settings.glowColor
+                light.Brightness = self.settings.glowIntensity
+                light.Range = 10
+                light.Parent = part
+            end)
+        end
+    end
+end
+
+-- Apply outline effect
+function CharacterCustomizer:ApplyOutline()
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
+            pcall(function()
+                -- Remove existing outline
+                local oldOutline = part:FindFirstChild("CustomOutline")
+                if oldOutline then oldOutline:Destroy() end
+                
+                -- Add new outline
+                local box = Instance.new("SelectionBox")
+                box.Name = "CustomOutline"
+                box.Adornee = part
+                box.Color3 = self.settings.outlineColor
+                box.LineThickness = self.settings.outlineThickness
+                box.Transparency = 0.2
+                box.Parent = part
+            end)
+        end
+    end
+end
+
+-- Remove glow effects
+function CharacterCustomizer:RemoveGlow()
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
+            pcall(function()
+                local glow = part:FindFirstChild("CustomGlow")
+                if glow then glow:Destroy() end
+            end)
+        end
+    end
+end
+
+-- Remove outline effects
+function CharacterCustomizer:RemoveOutline()
+    local parts = self:GetAllParts()
+    for _, part in pairs(parts) do
+        if part and part.Parent then
+            pcall(function()
+                local outline = part:FindFirstChild("CustomOutline")
+                if outline then outline:Destroy() end
+            end)
+        end
+    end
+end
+
+-- Restore original properties
+function CharacterCustomizer:RestoreColors()
+    for part, props in pairs(self.originalProperties) do
+        if part and part.Parent and props then
+            if not self.state.rainbowEnabled and not self.state.customColorEnabled then
+                pcall(function()
+                    if props.color then
+                        part.Color = props.color
                     end
-                end
-                
-                if characterEffects.materialEnabled then
-                    obj.Material = Enum.Material[characterEffects.selectedMaterial]
-                end
-            end)
+                end)
+            end
         end
     end
-    
-    characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
 end
 
--- Function to apply custom color
-local function applyCustomColor()
-    if not character then return end
-    
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+function CharacterCustomizer:RestoreMaterials()
+    for part, props in pairs(self.originalProperties) do
+        if part and part.Parent and props then
             pcall(function()
-                obj.Color = characterEffects.customColor
-                
-                if characterEffects.transparencyEnabled then
-                    obj.Transparency = characterEffects.transparencyValue
-                    local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceApp then
-                        surfaceApp.Transparency = characterEffects.transparencyValue
-                    end
-                end
-                
-                if characterEffects.materialEnabled then
-                    obj.Material = Enum.Material[characterEffects.selectedMaterial]
+                if props.material then
+                    part.Material = props.material
                 end
             end)
         end
     end
 end
 
--- Function to apply material
-local function applyMaterial()
-    if not character then return end
-    
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+function CharacterCustomizer:RestoreTransparency()
+    for part, props in pairs(self.originalProperties) do
+        if part and part.Parent and props then
             pcall(function()
-                obj.Material = Enum.Material[characterEffects.selectedMaterial]
+                if props.transparency ~= nil then
+                    part.Transparency = props.transparency
+                else
+                    part.Transparency = 0
+                end
             end)
         end
     end
 end
 
--- Function to apply transparency
-local function applyTransparency()
-    if not character then return end
+-- Toggle functions
+function CharacterCustomizer:ToggleRainbow(state)
+    self.state.rainbowEnabled = state
     
-    local parts = getCharacterParts()
-    for _, obj in pairs(parts) do
-        if obj and obj.Parent then
+    if state then
+        if not self.isInitialized then
+            self:StoreOriginalProperties()
+        end
+        
+        -- Disable custom color
+        self.state.customColorEnabled = false
+        
+        -- Start rainbow effect
+        self:CleanupConnections("rainbow")
+        local conn = RunService.Heartbeat:Connect(function()
+            self:UpdateRainbow()
+        end)
+        table.insert(self.connections, {connection = conn, type = "rainbow"})
+    else
+        self:CleanupConnections("rainbow")
+        if not self.state.customColorEnabled then
+            self:RestoreColors()
+        end
+    end
+end
+
+function CharacterCustomizer:ToggleCustomColor(state)
+    self.state.customColorEnabled = state
+    
+    if state then
+        if not self.isInitialized then
+            self:StoreOriginalProperties()
+        end
+        
+        -- Disable rainbow
+        self.state.rainbowEnabled = false
+        self:CleanupConnections("rainbow")
+        
+        self:ApplyCustomColor()
+    else
+        if not self.state.rainbowEnabled then
+            self:RestoreColors()
+        end
+    end
+end
+
+function CharacterCustomizer:ToggleMaterial(state)
+    self.state.materialEnabled = state
+    
+    if state then
+        if not self.isInitialized then
+            self:StoreOriginalProperties()
+        end
+        self:ApplyMaterial()
+    else
+        self:RestoreMaterials()
+    end
+end
+
+function CharacterCustomizer:ToggleTransparency(state)
+    self.state.transparencyEnabled = state
+    
+    if state then
+        if not self.isInitialized then
+            self:StoreOriginalProperties()
+        end
+        self:ApplyTransparency()
+    else
+        self:RestoreTransparency()
+    end
+end
+
+function CharacterCustomizer:ToggleGlow(state)
+    self.state.glowEnabled = state
+    
+    if state then
+        if not self.isInitialized then
+            self:StoreOriginalProperties()
+        end
+        self:ApplyGlow()
+    else
+        self:RemoveGlow()
+    end
+end
+
+function CharacterCustomizer:ToggleOutline(state)
+    self.state.outlineEnabled = state
+    
+    if state then
+        if not self.isInitialized then
+            self:StoreOriginalProperties()
+        end
+        self:ApplyOutline()
+    else
+        self:RemoveOutline()
+    end
+end
+
+-- Connection management
+function CharacterCustomizer:CleanupConnections(connectionType)
+    for i = #self.connections, 1, -1 do
+        local conn = self.connections[i]
+        if type(conn) == "table" then
+            if not connectionType or conn.type == connectionType then
+                if conn.connection and conn.connection.Connected then
+                    conn.connection:Disconnect()
+                end
+                table.remove(self.connections, i)
+            end
+        end
+    end
+end
+
+-- Full restore function
+function CharacterCustomizer:FullRestore()
+    -- Disable all states
+    for key in pairs(self.state) do
+        self.state[key] = false
+    end
+    
+    -- Clean up connections
+    self:CleanupConnections()
+    
+    -- Remove effects
+    self:RemoveGlow()
+    self:RemoveOutline()
+    
+    -- Restore all properties
+    for part, props in pairs(self.originalProperties) do
+        if part and part.Parent and props then
             pcall(function()
-                obj.Transparency = characterEffects.transparencyValue
-                
-                local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceApp then
-                    surfaceApp.Transparency = characterEffects.transparencyValue
+                if props.color then
+                    part.Color = props.color
+                end
+                if props.material then
+                    part.Material = props.material
+                end
+                if props.transparency ~= nil then
+                    part.Transparency = props.transparency
+                else
+                    part.Transparency = 0
                 end
             end)
         end
     end
     
-    -- Handle face transparency separately with reduced value
-    local head = character:FindFirstChild("Head")
-    if head then
-        local face = head:FindFirstChild("face")
-        if face and face:IsA("Decal") then
-            pcall(function()
-                face.Transparency = math.min(characterEffects.transparencyValue * 0.7, 0.8)
-            end)
+    -- Clear cache and reset
+    self.partsCache = {}
+    self.lastCacheUpdate = 0
+    self.isInitialized = false
+    self.originalProperties = {}
+end
+
+-- Character respawn handling
+function CharacterCustomizer:HandleCharacterAdded(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid", 5)
+    
+    -- Reset everything
+    self.partsCache = {}
+    self.lastCacheUpdate = 0
+    self.isInitialized = false
+    self.originalProperties = {}
+    
+    -- Wait for character to fully load
+    task.wait(1)
+    
+    -- Reapply active effects
+    local activeEffects = {}
+    for effect, enabled in pairs(self.state) do
+        if enabled then
+            activeEffects[effect] = true
+        end
+    end
+    
+    -- Store originals first
+    if next(activeEffects) then
+        self:StoreOriginalProperties()
+        
+        -- Reapply effects
+        if activeEffects.rainbowEnabled then
+            self:ToggleRainbow(true)
+        elseif activeEffects.customColorEnabled then
+            self:ApplyCustomColor()
+        end
+        
+        if activeEffects.materialEnabled then
+            self:ApplyMaterial()
+        end
+        
+        if activeEffects.transparencyEnabled then
+            self:ApplyTransparency()
+        end
+        
+        if activeEffects.glowEnabled then
+            self:ApplyGlow()
+        end
+        
+        if activeEffects.outlineEnabled then
+            self:ApplyOutline()
         end
     end
 end
 
--- Function to update all character effects
-local function updateCharacterEffects()
-    if characterEffects.materialEnabled then
-        applyMaterial()
-    end
-    
-    if characterEffects.transparencyEnabled then
-        applyTransparency()
-    end
-    
-    if characterEffects.rainbowEnabled then
-        applyRainbowEffect()
-    elseif characterEffects.customColorEnabled then
-        applyCustomColor()
-    end
-end
+-- === UI ELEMENTS ===
 
--- Rainbow Toggle
+-- Rainbow Section
 seccharacter:AddToggle({
     text = "Rainbow Character",
     state = false,
     tooltip = "Makes your character cycle through rainbow colors",
     flag = "Toggle_Rainbow",
     callback = function(state)
-        characterEffects.rainbowEnabled = state
-        
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
-            
-            -- Disable custom color if rainbow is enabled
-            if characterEffects.customColorEnabled then
-                characterEffects.customColorEnabled = false
-            end
-            
-            -- Clean up existing connection
-            if characterEffects.rainbowConnection then
-                characterEffects.rainbowConnection:Disconnect()
-            end
-            
-            -- Start rainbow effect
-            characterEffects.rainbowConnection = RunService.Heartbeat:Connect(applyRainbowEffect)
-        else
-            -- Stop rainbow effect
-            if characterEffects.rainbowConnection then
-                characterEffects.rainbowConnection:Disconnect()
-                characterEffects.rainbowConnection = nil
-            end
-            
-            -- Restore colors if no other color effect is active
-            if not characterEffects.customColorEnabled then
-                restoreOriginalColors()
-            end
-        end
+        CharacterCustomizer:ToggleRainbow(state)
+    end
+}):AddBind({
+    text = "Rainbow Key",
+    tooltip = "Hotkey to toggle rainbow effect",
+    mode = "toggle",
+    bind = "None",
+    callback = function(v)
+        CharacterCustomizer:ToggleRainbow(v)
     end
 })
 
--- Rainbow Speed Slider
 seccharacter:AddSlider({
     text = "Rainbow Speed",
     tooltip = "Adjust the speed of the rainbow effect",
@@ -1242,82 +1259,63 @@ seccharacter:AddSlider({
     increment = 0.1,
     default = 1,
     callback = function(v)
-        characterEffects.rainbowSpeed = v
+        CharacterCustomizer.settings.rainbowSpeed = v
     end
 })
 
-seccharacter:AddSeparator({ text = "" })
+seccharacter:AddSeparator({ text = "Color & Material" })
 
--- Custom Color Toggle
+-- Custom Color Section
 seccharacter:AddToggle({
     text = "Custom Color",
     state = false,
     tooltip = "Apply a custom color to your character",
     flag = "Toggle_CustomColor",
     callback = function(state)
-        characterEffects.customColorEnabled = state
-        
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
-            
-            -- Disable rainbow if custom color is enabled
-            if characterEffects.rainbowEnabled then
-                characterEffects.rainbowEnabled = false
-                if characterEffects.rainbowConnection then
-                    characterEffects.rainbowConnection:Disconnect()
-                    characterEffects.rainbowConnection = nil
-                end
-            end
-            
-            applyCustomColor()
-        else
-            -- Restore colors if rainbow is not active
-            if not characterEffects.rainbowEnabled then
-                restoreOriginalColors()
-            end
-        end
+        CharacterCustomizer:ToggleCustomColor(state)
+    end
+}):AddBind({
+    text = "Color Key",
+    tooltip = "Hotkey to toggle custom color",
+    mode = "toggle",
+    bind = "None",
+    callback = function(v)
+        CharacterCustomizer:ToggleCustomColor(v)
     end
 })
 
--- Color Picker
 seccharacter:AddColor({
     text = "Character Color",
     tooltip = "Choose a color for your character",
-    color = characterEffects.customColor,
+    color = CharacterCustomizer.settings.customColor,
     trans = 0,
     callback = function(color)
-        characterEffects.customColor = color
-        if characterEffects.customColorEnabled then
-            applyCustomColor()
+        CharacterCustomizer.settings.customColor = color
+        if CharacterCustomizer.state.customColorEnabled then
+            CharacterCustomizer:ApplyCustomColor()
         end
     end
 })
 
-seccharacter:AddSeparator({ text = "" })
-
--- Material Toggle
+-- Material Section
 seccharacter:AddToggle({
     text = "Custom Material",
     state = false,
     tooltip = "Apply a custom material to your character",
     flag = "Toggle_Material",
     callback = function(state)
-        characterEffects.materialEnabled = state
-        
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
-            applyMaterial()
-        else
-            restoreOriginalColors()
-        end
+        CharacterCustomizer:ToggleMaterial(state)
+    end
+}):AddBind({
+    text = "Material Key",
+    tooltip = "Hotkey to toggle custom material",
+    mode = "toggle",
+    bind = "None",
+    callback = function(v)
+        CharacterCustomizer:ToggleMaterial(v)
     end
 })
 
--- Material Dropdown
 seccharacter:AddList({
     text = "Material Type",
     tooltip = "Select character material",
@@ -1328,39 +1326,38 @@ seccharacter:AddList({
         "ForceField", "Neon", "Glass", "Plastic", "Wood", "Slate", "Concrete",
         "CorrodedMetal", "DiamondPlate", "Foil", "Grass", "Ice", "Marble",
         "Granite", "Brick", "Pebble", "Sand", "Fabric", "SmoothPlastic",
-        "Metal", "WoodPlanks", "Cobblestone"
+        "Metal", "WoodPlanks", "Cobblestone", "Asphalt", "LeafyGrass",
+        "Rock", "Cardboard", "Pavement"
     },
     callback = function(v)
-        characterEffects.selectedMaterial = v
-        if characterEffects.materialEnabled then
-            applyMaterial()
+        CharacterCustomizer.settings.selectedMaterial = v
+        if CharacterCustomizer.state.materialEnabled then
+            CharacterCustomizer:ApplyMaterial()
         end
     end
 })
 
-seccharacter:AddSeparator({ text = "" })
+seccharacter:AddSeparator({ text = "Transparency & Effects" })
 
--- Transparency Toggle
+-- Transparency Section
 seccharacter:AddToggle({
     text = "Character Transparency",
     state = false,
     tooltip = "Make your character transparent",
     flag = "Toggle_Transparency",
     callback = function(state)
-        characterEffects.transparencyEnabled = state
-        
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
-            applyTransparency()
-        else
-            restoreOriginalColors()
-        end
+        CharacterCustomizer:ToggleTransparency(state)
+    end
+}):AddBind({
+    text = "Transparency Key",
+    tooltip = "Hotkey to toggle transparency",
+    mode = "toggle",
+    bind = "None",
+    callback = function(v)
+        CharacterCustomizer:ToggleTransparency(v)
     end
 })
 
--- Transparency Slider
 seccharacter:AddSlider({
     text = "Transparency Level",
     tooltip = "Adjust character transparency",
@@ -1370,133 +1367,189 @@ seccharacter:AddSlider({
     increment = 0.05,
     default = 0.5,
     callback = function(v)
-        characterEffects.transparencyValue = v
-        if characterEffects.transparencyEnabled then
-            applyTransparency()
+        CharacterCustomizer.settings.transparencyValue = v
+        if CharacterCustomizer.state.transparencyEnabled then
+            CharacterCustomizer:ApplyTransparency()
         end
     end
 })
 
--- Monitor for character changes
-local function handleCharacterAdded(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid", 5)
-    
-    -- Reset character effects storage
-    characterEffects.originalColors = {}
-    characterEffects.zigzagCounter = 1
-    
-    -- Wait for character to fully load
-    task.wait(1)
-    
-    -- Reapply character effects
-    if characterEffects.rainbowEnabled or characterEffects.customColorEnabled or 
-       characterEffects.materialEnabled or characterEffects.transparencyEnabled then
-        storeOriginalColors()
-        updateCharacterEffects()
-        
-        -- Restart rainbow connection if needed
-        if characterEffects.rainbowEnabled then
-            if characterEffects.rainbowConnection then
-                characterEffects.rainbowConnection:Disconnect()
-            end
-            characterEffects.rainbowConnection = RunService.Heartbeat:Connect(applyRainbowEffect)
+-- Glow Section
+seccharacter:AddToggle({
+    text = "Character Glow",
+    state = false,
+    tooltip = "Add a glowing effect to your character",
+    flag = "Toggle_Glow",
+    callback = function(state)
+        CharacterCustomizer:ToggleGlow(state)
+    end
+}):AddBind({
+    text = "Glow Key",
+    tooltip = "Hotkey to toggle glow effect",
+    mode = "toggle",
+    bind = "None",
+    callback = function(v)
+        CharacterCustomizer:ToggleGlow(v)
+    end
+})
+
+seccharacter:AddColor({
+    text = "Glow Color",
+    tooltip = "Choose the glow color",
+    color = CharacterCustomizer.settings.glowColor,
+    trans = 0,
+    callback = function(color)
+        CharacterCustomizer.settings.glowColor = color
+        if CharacterCustomizer.state.glowEnabled then
+            CharacterCustomizer:ApplyGlow()
         end
     end
-end
+})
 
--- Monitor for new Arms model
-local function handleArmsAdded()
-    task.wait(0.1) -- Small delay to ensure arms are fully loaded
-    if characterEffects.rainbowEnabled or characterEffects.customColorEnabled or 
-       characterEffects.materialEnabled or characterEffects.transparencyEnabled then
-        storeOriginalColors()
-        updateCharacterEffects()
+seccharacter:AddSlider({
+    text = "Glow Intensity",
+    tooltip = "Adjust glow brightness",
+    flag = "glowintensity",
+    min = 0.1,
+    max = 3,
+    increment = 0.1,
+    default = 1,
+    callback = function(v)
+        CharacterCustomizer.settings.glowIntensity = v
+        if CharacterCustomizer.state.glowEnabled then
+            CharacterCustomizer:ApplyGlow()
+        end
     end
-end
+})
 
--- Connect event handlers
+-- Outline Section
+seccharacter:AddToggle({
+    text = "Character Outline",
+    state = false,
+    tooltip = "Add an outline to your character",
+    flag = "Toggle_Outline",
+    callback = function(state)
+        CharacterCustomizer:ToggleOutline(state)
+    end
+}):AddBind({
+    text = "Outline Key",
+    tooltip = "Hotkey to toggle outline",
+    mode = "toggle",
+    bind = "None",
+    callback = function(v)
+        CharacterCustomizer:ToggleOutline(v)
+    end
+})
+
+seccharacter:AddColor({
+    text = "Outline Color",
+    tooltip = "Choose the outline color",
+    color = CharacterCustomizer.settings.outlineColor,
+    trans = 0,
+    callback = function(color)
+        CharacterCustomizer.settings.outlineColor = color
+        if CharacterCustomizer.state.outlineEnabled then
+            CharacterCustomizer:ApplyOutline()
+        end
+    end
+})
+
+seccharacter:AddSlider({
+    text = "Outline Thickness",
+    tooltip = "Adjust outline thickness",
+    flag = "outlinethickness",
+    min = 0.05,
+    max = 0.5,
+    increment = 0.05,
+    default = 0.1,
+    callback = function(v)
+        CharacterCustomizer.settings.outlineThickness = v
+        if CharacterCustomizer.state.outlineEnabled then
+            CharacterCustomizer:ApplyOutline()
+        end
+    end
+})
+
+-- Control Section
+seccharacter:AddSeparator({ text = "Controls" })
+
+seccharacter:AddButton({
+    text = "Reset All Effects",
+    tooltip = "Reset all character customization to original",
+    callback = function()
+        CharacterCustomizer:FullRestore()
+        warn("All character effects have been reset")
+    end
+})
+
+seccharacter:AddButton({
+    text = "Refresh Character",
+    tooltip = "Refresh character detection and reapply effects",
+    callback = function()
+        if character then
+            CharacterCustomizer:HandleCharacterAdded(character)
+            warn("Character refreshed and effects reapplied")
+        else
+            warn("No character found to refresh")
+        end
+    end
+})
+
+-- === EVENT CONNECTIONS ===
+
+-- Connect to character events
+player.CharacterAdded:Connect(function(char)
+    CharacterCustomizer:HandleCharacterAdded(char)
+end)
+
+-- Monitor arms addition/removal
 if workspace.Camera then
     workspace.Camera.ChildAdded:Connect(function(child)
         if child.Name == "Arms" then
-            handleArmsAdded()
-        end
-    end)
-    
-    workspace.Camera.ChildRemoved:Connect(function(child)
-        if child.Name == "Arms" then
-            -- Clean up arms references from originalColors
-            local newOriginalColors = {}
-            for obj, properties in pairs(characterEffects.originalColors) do
-                if obj.Parent and not obj:IsDescendantOf(child) then
-                    newOriginalColors[obj] = properties
+            task.wait(0.1)
+            CharacterCustomizer.partsCache = {}
+            CharacterCustomizer.lastCacheUpdate = 0
+            
+            -- Reapply effects to arms
+            if CharacterCustomizer.isInitialized then
+                if CharacterCustomizer.state.rainbowEnabled then
+                    -- Rainbow will handle automatically
+                elseif CharacterCustomizer.state.customColorEnabled then
+                    CharacterCustomizer:ApplyCustomColor()
+                end
+                
+                if CharacterCustomizer.state.materialEnabled then
+                    CharacterCustomizer:ApplyMaterial()
+                end
+                
+                if CharacterCustomizer.state.transparencyEnabled then
+                    CharacterCustomizer:ApplyTransparency()
+                end
+                
+                if CharacterCustomizer.state.glowEnabled then
+                    CharacterCustomizer:ApplyGlow()
+                end
+                
+                if CharacterCustomizer.state.outlineEnabled then
+                    CharacterCustomizer:ApplyOutline()
                 end
             end
-            characterEffects.originalColors = newOriginalColors
         end
     end)
 end
 
--- Connect to character added event
-player.CharacterAdded:Connect(handleCharacterAdded)
-
--- Initialize effects for existing character
+-- Initialize for existing character
 if character then
-    handleCharacterAdded(character)
+    task.spawn(function()
+        CharacterCustomizer:HandleCharacterAdded(character)
+    end)
 end
 
 -- Cleanup function for character effects
 local function cleanupCharacterEffects()
-    if characterEffects.rainbowConnection then
-        characterEffects.rainbowConnection:Disconnect()
-        characterEffects.rainbowConnection = nil
-    end
-    
-    restoreOriginalColors()
-    
-    characterEffects.rainbowEnabled = false
-    characterEffects.customColorEnabled = false
-    characterEffects.materialEnabled = false
-    characterEffects.transparencyEnabled = false
-    characterEffects.zigzagCounter = 1
-    characterEffects.originalColors = {}
+    CharacterCustomizer:CleanupConnections()
+    CharacterCustomizer:FullRestore()
 end
 
--- Master cleanup function
-local function masterCleanup()
-    cleanupStats()
-    cleanupCharacterEffects()
-end
-
--- Store helper functions for external access
-if secplayer then
-    secplayer.DisableStats = cleanupStats
-    secplayer.GetMovementMethod = function()
-        return currentMovementMethod
-    end
-end
-
--- Store cleanup functions for external access
-if _G.PlayerTab then
-    _G.PlayerTab.CleanupStats = cleanupStats
-    _G.PlayerTab.CleanupCharacterEffects = cleanupCharacterEffects
-    _G.PlayerTab.MasterCleanup = masterCleanup
-    _G.PlayerTab.GetMovementMethod = function()
-        return currentMovementMethod
-    end
-end
-
--- Connect cleanup to player leaving or script ending
-game.Players.PlayerRemoving:Connect(function(plr)
-    if plr == player then
-        masterCleanup()
-    end
-end)
-
--- Final initialization
-if character then
-    setupCharacter(character)
-end
-
--- Mark section as loaded for external scripts
-_G.PlayerSectionLoaded = true
+-- Store cleanup function for external access
+_G.PlayerTab.CleanupCharacterEffects = cleanupCharacterEffects
