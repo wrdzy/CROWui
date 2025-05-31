@@ -75,7 +75,7 @@ local states = {
     speedEnabled = false,
     jumpEnabled = false,
     fovEnabled = false,
-    noclipEnabled = false,
+    --noclipEnabled = false,
     fullbrightEnabled = false
 }
 
@@ -97,7 +97,7 @@ local function trackConnection(connection, metadata)
 end
 
 -- Forward declarations for toggle functions
-local toggleSpeed, toggleJump, toggleFOV, toggleNoclip, toggleFullBright
+local toggleSpeed, toggleJump, toggleFOV, toggleFullBright--,toggleNoclip
 
 -- Character Setup (called when character spawns or respawns)
 local function setupCharacter(char)
@@ -141,7 +141,7 @@ local function setupCharacter(char)
         task.wait(0.2)
         if states.speedEnabled then toggleSpeed(true) end
         if states.jumpEnabled then toggleJump(true) end
-        if states.noclipEnabled then toggleNoclip(true) end
+        --if states.noclipEnabled then toggleNoclip(true) end
     end)
 end
 
@@ -332,14 +332,14 @@ local function enforceProperties()
         camera.FieldOfView = fovValue
     end
     
-    -- Noclip enforcement
-    if states.noclipEnabled then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
+    -- -- Noclip enforcement
+    -- if states.noclipEnabled then
+    --     for _, part in ipairs(character:GetDescendants()) do
+    --         if part:IsA("BasePart") then
+    --             part.CanCollide = false
+    --         end
+    --     end
+    -- end
     
     -- Jump enforcement
     if states.jumpEnabled and jumpPropertyName ~= "" then
@@ -424,37 +424,37 @@ toggleFOV = function(state)
     watchFOV()
 end
 
-toggleNoclip = function(state)
-    states.noclipEnabled = state
+-- toggleNoclip = function(state)
+--     states.noclipEnabled = state
     
-    for i = #connections, 1, -1 do
-        local conn = connections[i]
-        if type(conn) == "table" and conn.type == "noclip" then
-            conn.connection:Disconnect()
-            table.remove(connections, i)
-        end
-    end
+--     for i = #connections, 1, -1 do
+--         local conn = connections[i]
+--         if type(conn) == "table" and conn.type == "noclip" then
+--             conn.connection:Disconnect()
+--             table.remove(connections, i)
+--         end
+--     end
     
-    if state then
-        trackConnection(RunService.Heartbeat:Connect(function()
-            if not character or not character.Parent then return end
+--     if state then
+--         trackConnection(RunService.Heartbeat:Connect(function()
+--             if not character or not character.Parent then return end
             
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
-            end
-        end), "noclip")
-    else
-        if character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                    part.CanCollide = true
-                end
-            end
-        end
-    end
-end
+--             for _, part in ipairs(character:GetDescendants()) do
+--                 if part:IsA("BasePart") then
+--                     part.CanCollide = false
+--                 end
+--             end
+--         end), "noclip")
+--     else
+--         if character then
+--             for _, part in ipairs(character:GetDescendants()) do
+--                 if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+--                     part.CanCollide = true
+--                 end
+--             end
+--         end
+--     end
+-- end
 
 toggleFullBright = function(state)
     states.fullbrightEnabled = state
@@ -554,7 +554,7 @@ local function cleanupStats()
     states.speedEnabled = false
     states.jumpEnabled = false
     states.fovEnabled = false
-    states.noclipEnabled = false
+    -- states.noclipEnabled = false
     states.fullbrightEnabled = false
 end
 
@@ -642,23 +642,23 @@ secplayer:AddToggle({
 
 secplayer:AddSeparator({ text = "" })
 
-secplayer:AddToggle({
-    text = "Noclip",
-    state = false,
-    tooltip = "Toggle noclip mode",
-    flag = "Toggle_Noclip",
-    callback = function(state)
-        toggleNoclip(state)
-    end
-}):AddBind({
-    text = "Noclip Key",
-    tooltip = "Hotkey to toggle noclip mode",
-    mode = "toggle",
-    bind = "None",
-    callback = function(v)
-        toggleNoclip(v)
-    end
-})
+-- secplayer:AddToggle({
+--     text = "Noclip",
+--     state = false,
+--     tooltip = "Toggle noclip mode",
+--     flag = "Toggle_Noclip",
+--     callback = function(state)
+--         toggleNoclip(state)
+--     end
+-- }):AddBind({
+--     text = "Noclip Key",
+--     tooltip = "Hotkey to toggle noclip mode",
+--     mode = "toggle",
+--     bind = "None",
+--     callback = function(v)
+--         toggleNoclip(v)
+--     end
+-- })
 
 secplayer:AddSeparator({ text = "Misc" })
 
