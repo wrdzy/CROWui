@@ -1,20 +1,31 @@
 -- Player Section
 local secplayer = _G.PlayerTab:AddSection("Player", 1)
-secplayer:AddSeparator({ enabled = true, text = "Player" })
+secplayer:AddSeparator({ text = "Player" })
 
 -- Service References
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting") -- Added for FullBright
+local Lighting = game:GetService("Lighting")
 
 -- Player References
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+local humanoid = character and character:WaitForChild("Humanoid", 5)
 local camera = workspace.CurrentCamera
 
+-- Validation checks
+if not player then
+    warn("LocalPlayer not found")
+    return
+end
+
+if not camera then
+    warn("Camera not found")
+    return
+end
+
 -- Configuration values - Each feature has independent values
-local speedValue = humanoid.WalkSpeed ~= 0 and humanoid.WalkSpeed or 16
+local speedValue = (humanoid and humanoid.WalkSpeed ~= 0) and humanoid.WalkSpeed or 16
 local fovValue = camera.FieldOfView
 local originalFov = camera.FieldOfView
 
@@ -33,25 +44,31 @@ local originalLighting = {
 local jumpPropertyName = ""
 local jumpValue, jumpMin, jumpMax, jumpMultiplier
 
-if pcall(function() return humanoid.JumpPower end) then
-    jumpPropertyName = "JumpPower"
-    jumpValue = humanoid.JumpPower
-    jumpMin = jumpValue
-    jumpMax = jumpValue * 3
-    jumpMultiplier = 1
-elseif pcall(function() return humanoid.JumpHeight end) then
-    jumpPropertyName = "JumpHeight"
-    jumpValue = humanoid.JumpHeight
-    jumpMin = jumpValue
-    jumpMax = jumpValue * 2
-    jumpMultiplier = 0.5
-else
-    jumpPropertyName = "JumpPower"
-    jumpValue = 50
-    jumpMin = jumpValue
-    jumpMax = jumpValue * 3
-    jumpMultiplier = 1
+local function detectJumpProperty()
+    if not humanoid then return end
+    
+    if pcall(function() return humanoid.JumpPower end) then
+        jumpPropertyName = "JumpPower"
+        jumpValue = humanoid.JumpPower
+        jumpMin = jumpValue
+        jumpMax = jumpValue * 3
+        jumpMultiplier = 1
+    elseif pcall(function() return humanoid.JumpHeight end) then
+        jumpPropertyName = "JumpHeight"
+        jumpValue = humanoid.JumpHeight
+        jumpMin = jumpValue
+        jumpMax = jumpValue * 2
+        jumpMultiplier = 0.5
+    else
+        jumpPropertyName = "JumpPower"
+        jumpValue = 50
+        jumpMin = jumpValue
+        jumpMax = jumpValue * 3
+        jumpMultiplier = 1
+    end
 end
+
+detectJumpProperty()
 
 -- States
 local states = {
@@ -89,12 +106,12 @@ local function setupCharacter(char)
     -- Update character references
     character = char
     
-    -- Wait for humanoid to be available
+    -- Wait for humanoid to be available with timeout
     local waitTime = 0
-    local maxWaitTime = 5 -- maximum seconds to wait
+    local maxWaitTime = 5
     
     while not character:FindFirstChild("Humanoid") and waitTime < maxWaitTime do
-        wait(0.1)
+        task.wait(0.1)
         waitTime = waitTime + 0.1
     end
     
@@ -109,6 +126,9 @@ local function setupCharacter(char)
         humanoid.WalkSpeed = 16
     end
     
+    -- Re-detect jump property for new character
+    detectJumpProperty()
+    
     if jumpPropertyName ~= "" then
         -- Set jump property
         if pcall(function() return humanoid[jumpPropertyName] end) then
@@ -117,8 +137,8 @@ local function setupCharacter(char)
     end
     
     -- Reapply active states with a slight delay to ensure properties exist
-    spawn(function()
-        wait(0.2) -- Small delay to ensure character is fully loaded
+    task.spawn(function()
+        task.wait(0.2)
         if states.speedEnabled then toggleSpeed(true) end
         if states.jumpEnabled then toggleJump(true) end
         if states.noclipEnabled then toggleNoclip(true) end
@@ -151,7 +171,6 @@ local movementMethods = {
         if states.jumpEnabled and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
             if rootPart then
-                -- Apply extra upward velocity for jumping
                 local jumpVelocity = rootPart.Velocity + Vector3.new(0, jumpValue * 0.5, 0)
                 rootPart.Velocity = jumpVelocity
             end
@@ -159,16 +178,13 @@ local movementMethods = {
     end,
     
     ["Normal"] = function()
-        -- Normal mode continuously sets properties to ensure they never change
         if not character or not character:FindFirstChild("Humanoid") then return end
         local humanoid = character:FindFirstChild("Humanoid")
         
-        -- Always maintain the current walkspeed regardless of external changes
         if states.speedEnabled then
             humanoid.WalkSpeed = speedValue
         end
         
-        -- Always maintain the current jump property regardless of external changes
         if states.jumpEnabled and jumpPropertyName ~= "" then
             if pcall(function() return humanoid[jumpPropertyName] end) then
                 humanoid[jumpPropertyName] = jumpValue
@@ -186,7 +202,6 @@ local movementMethods = {
         if moveDirection.Magnitude > 0.1 then
             local normalizedDir = moveDirection.Unit
             
-            -- Apply velocity-based movement
             rootPart.Velocity = Vector3.new(
                 normalizedDir.X * speedValue * 1.2,
                 rootPart.Velocity.Y,
@@ -194,7 +209,6 @@ local movementMethods = {
             )
         end
         
-        -- Apply jump enhancement for Velocity method
         if states.jumpEnabled and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
             rootPart.Velocity = Vector3.new(
                 rootPart.Velocity.X,
@@ -210,7 +224,6 @@ local movementMethods = {
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return end
         
-        -- Find or create BodyVelocity instance
         local bodyVelocity = rootPart:FindFirstChild("MovementBodyVelocity")
         if not bodyVelocity then
             bodyVelocity = Instance.new("BodyVelocity")
@@ -232,9 +245,7 @@ local movementMethods = {
             bodyVelocity.Velocity = Vector3.new(0, 0, 0)
         end
         
-        -- Apply jump enhancement for BodyVelocity method
         if states.jumpEnabled and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
-            -- Find or create BodyVelocity for jumping
             local jumpVelocity = rootPart:FindFirstChild("JumpBodyVelocity")
             if not jumpVelocity then
                 jumpVelocity = Instance.new("BodyVelocity")
@@ -244,12 +255,10 @@ local movementMethods = {
                 jumpVelocity.Parent = rootPart
             end
             
-            -- Apply jump force
             jumpVelocity.Velocity = Vector3.new(0, jumpValue * 2, 0)
             
-            -- Remove jump force after a short delay
-            spawn(function()
-                wait(0.2)
+            task.spawn(function()
+                task.wait(0.2)
                 if jumpVelocity and jumpVelocity.Parent then
                     jumpVelocity:Destroy()
                 end
@@ -269,11 +278,9 @@ local movementMethods = {
             local deltaTime = RunService.Heartbeat:Wait()
             local impulseForce = normalizedDir * speedValue * deltaTime * 20
             
-            -- Apply impulse force 
             rootPart:ApplyImpulse(impulseForce)
         end
         
-        -- Apply jump impulse
         if states.jumpEnabled and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
             rootPart:ApplyImpulse(Vector3.new(0, jumpValue * 15, 0))
         end
@@ -286,7 +293,6 @@ local function cleanupMovementMethod(methodName)
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     
-    -- Clean up BodyVelocity instances if they exist
     if methodName == "BodyVelocity" or methodName == "all" then
         local bv = rootPart:FindFirstChild("MovementBodyVelocity")
         if bv then bv:Destroy() end
@@ -298,7 +304,7 @@ end
 
 -- FOV watcher - ensures FOV is always at the correct value
 local function watchFOV()
-    -- Set up FOV watcher
+    if not camera then return end
     trackConnection(camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
         if states.fovEnabled and camera.FieldOfView ~= fovValue then
             camera.FieldOfView = fovValue
@@ -310,11 +316,9 @@ end
 local function enforceProperties()
     -- Check if character exists
     if not workspace:FindFirstChild(player.Name) then
-        -- Character doesn't exist (player died), wait for respawn
         return
     end
     
-    -- Re-get character and humanoid references if they don't exist
     if not character or not character.Parent then
         character = workspace:FindFirstChild(player.Name)
         if not character then return end
@@ -323,8 +327,8 @@ local function enforceProperties()
     if not character:FindFirstChild("Humanoid") then return end
     local humanoid = character:FindFirstChild("Humanoid")
     
-    -- FOV enforcement - Always force FOV to be the slider value when enabled
-    if states.fovEnabled and camera.FieldOfView ~= fovValue then
+    -- FOV enforcement
+    if states.fovEnabled and camera and camera.FieldOfView ~= fovValue then
         camera.FieldOfView = fovValue
     end
     
@@ -376,13 +380,11 @@ local function toggleMovement(state)
         end
     end
     
-    -- Clean up any physics objects from previous methods
     cleanupMovementMethod("all")
     
     if state then
         trackConnection(RunService.Heartbeat:Connect(movementMethods[currentMovementMethod]), "movement")
     else
-        -- Restore default speed
         if character and character:FindFirstChild("Humanoid") then
             character:FindFirstChild("Humanoid").WalkSpeed = 16
         end
@@ -393,7 +395,6 @@ toggleSpeed = function(state)
     states.speedEnabled = state
     toggleMovement(state)
     
-    -- Immediately apply speed value
     if character and character:FindFirstChild("Humanoid") then
         character:FindFirstChild("Humanoid").WalkSpeed = state and speedValue or 16
     end
@@ -412,21 +413,20 @@ end
 toggleFOV = function(state)
     states.fovEnabled = state
     
-    -- Immediately apply FOV value
+    if not camera then return end
+    
     if state then
         camera.FieldOfView = fovValue
     else
         camera.FieldOfView = originalFov
     end
     
-    -- Set up FOV watcher if not already set
     watchFOV()
 end
 
 toggleNoclip = function(state)
     states.noclipEnabled = state
     
-    -- Clean up previous noclip connections
     for i = #connections, 1, -1 do
         local conn = connections[i]
         if type(conn) == "table" and conn.type == "noclip" then
@@ -446,7 +446,6 @@ toggleNoclip = function(state)
             end
         end), "noclip")
     else
-        -- Restore collision
         if character then
             for _, part in ipairs(character:GetDescendants()) do
                 if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
@@ -457,11 +456,9 @@ toggleNoclip = function(state)
     end
 end
 
--- New function for FullBright toggle
 toggleFullBright = function(state)
     states.fullbrightEnabled = state
     
-    -- Clean up previous fullbright connections
     for i = #connections, 1, -1 do
         local conn = connections[i]
         if type(conn) == "table" and conn.type == "fullbright" then
@@ -471,7 +468,6 @@ toggleFullBright = function(state)
     end
     
     if state then
-        -- Store current lighting properties if not already stored
         originalLighting = {
             brightness = Lighting.Brightness,
             ambient = Lighting.Ambient,
@@ -482,14 +478,12 @@ toggleFullBright = function(state)
             globalShadows = Lighting.GlobalShadows
         }
         
-        -- Apply fullbright settings
         Lighting.Brightness = 2
         Lighting.ClockTime = 14
         Lighting.FogEnd = 100000
         Lighting.GlobalShadows = false
         Lighting.Ambient = Color3.fromRGB(178, 178, 178)
         
-        -- Add connection to maintain fullbright
         trackConnection(RunService.Heartbeat:Connect(function()
             Lighting.Brightness = 2
             Lighting.ClockTime = 14
@@ -497,7 +491,6 @@ toggleFullBright = function(state)
             Lighting.GlobalShadows = false
         end), "fullbright")
     else
-        -- Restore original lighting settings
         Lighting.Brightness = originalLighting.brightness
         Lighting.Ambient = originalLighting.ambient
         Lighting.ColorShift_Top = originalLighting.colorShift
@@ -509,18 +502,12 @@ toggleFullBright = function(state)
 end
 
 local function updateMovementMethod(method)
-    -- Clean up any physics objects from previous method
     cleanupMovementMethod(currentMovementMethod)
-    
     currentMovementMethod = method
     
     if states.speedEnabled then
         toggleMovement(false)
         toggleMovement(true)
-    end
-    
-    if movementDropdown then
-        movementDropdown:Select(method)
     end
 end
 
@@ -545,10 +532,8 @@ local function cleanupStats()
         table.remove(connections, i)
     end
     
-    -- Clean up any physics objects
     cleanupMovementMethod("all")
     
-    -- Reset to default values
     if character and character:FindFirstChild("Humanoid") then
         character:FindFirstChild("Humanoid").WalkSpeed = 16
         if jumpPropertyName ~= "" then
@@ -558,41 +543,34 @@ local function cleanupStats()
         end
     end
     
-    camera.FieldOfView = originalFov  -- Reset to original FOV
+    if camera then
+        camera.FieldOfView = originalFov
+    end
     
-    -- Reset lighting
     if states.fullbrightEnabled then
         toggleFullBright(false)
     end
     
-    -- Reset all states
     states.speedEnabled = false
     states.jumpEnabled = false
     states.fovEnabled = false
     states.noclipEnabled = false
     states.fullbrightEnabled = false
 end
--- UI ELEMENTS
 
--- Movement Method Dropdown
+-- UI ELEMENTS
 local movementDropdown = secplayer:AddList({
-    enabled = true,
     text = "Movement Method",
     tooltip = "Select player movement method",
     selected = "CFrame",
     multi = false,
-    open = false,
-    max = 5, -- Increased for more methods
-    values = { "CFrame", "Normal", "Velocity", "BodyVelocity", "Impulse" }, -- Added new methods
-    risky = false,
+    values = { "CFrame", "Normal", "Velocity", "BodyVelocity", "Impulse" },
     callback = function(v)
         updateMovementMethod(v)
     end
 })
 
--- Speed Controls
 local speedSlider = secplayer:AddSlider({
-    enabled = true,
     text = "WalkSpeed",
     tooltip = "Adjust player movement speed",
     flag = "walkspeed",
@@ -601,44 +579,33 @@ local speedSlider = secplayer:AddSlider({
     increment = 1,
     callback = function(v)
         speedValue = v
-        -- Force update speed if enabled, regardless of method
         if states.speedEnabled and character and character:FindFirstChild("Humanoid") then
             if currentMovementMethod == "Normal" then
                 character:FindFirstChild("Humanoid").WalkSpeed = speedValue
             end
-            -- In other modes, it will use the updated speedValue automatically
         end
     end
 })
 
--- Speed Toggle with Keybind
 secplayer:AddToggle({
     text = "Speed",
     state = false,
-    risky = true,
     tooltip = "Toggle custom movement speed",
     flag = "Toggle_Speed",
     callback = function(state)
         toggleSpeed(state)
     end
 }):AddBind({
-    enabled = true,
     text = "Speed Key",
     tooltip = "Hotkey to toggle speed",
     mode = "toggle",
     bind = "None",
-    state = false,
-    nomouse = false,
-    risky = true,
-    noindicator = false,
     callback = function(v)
         toggleSpeed(v)
     end
 })
 
--- Jump Controls
 local jumpSlider = secplayer:AddSlider({
-    enabled = true,
     text = jumpPropertyName,
     tooltip = "Adjust jump height/power",
     flag = "jumpvalue",
@@ -655,63 +622,47 @@ local jumpSlider = secplayer:AddSlider({
     end
 })
 
--- Jump Toggle with Keybind
 secplayer:AddToggle({
     text = "Jump",
     state = false,
-    risky = true,
     tooltip = "Toggle custom jump height",
     flag = "Toggle_Jump",
     callback = function(state)
         toggleJump(state)
     end
 }):AddBind({
-    enabled = true,
     text = "Jump Key",
     tooltip = "Hotkey to toggle jump",
     mode = "toggle",
     bind = "None",
-    state = false,
-    nomouse = false,
-    risky = true,
-    noindicator = false,
     callback = function(v)
         toggleJump(v)
     end
 })
 
-secplayer:AddSeparator({ enabled = true, text = "" })
+secplayer:AddSeparator({ text = "" })
 
--- Noclip Toggle and Keybind
 secplayer:AddToggle({
     text = "Noclip",
     state = false,
-    risky = true,
     tooltip = "Toggle noclip mode",
     flag = "Toggle_Noclip",
     callback = function(state)
         toggleNoclip(state)
     end
 }):AddBind({
-    enabled = true,
     text = "Noclip Key",
     tooltip = "Hotkey to toggle noclip mode",
     mode = "toggle",
     bind = "None",
-    state = false,
-    nomouse = false,
-    risky = true,
-    noindicator = false,
     callback = function(v)
         toggleNoclip(v)
     end
 })
 
--- FOV Controls
-secplayer:AddSeparator({ enabled = true, text = "Misc" })
+secplayer:AddSeparator({ text = "Misc" })
 
 local fovSlider = secplayer:AddSlider({
-    enabled = true,
     text = "Field of View",
     tooltip = "Adjust camera field of view",
     flag = "fov",
@@ -720,92 +671,59 @@ local fovSlider = secplayer:AddSlider({
     increment = 1,
     callback = function(v)
         fovValue = v
-        if states.fovEnabled then
-            -- Force update immediately
+        if states.fovEnabled and camera then
             camera.FieldOfView = v
         end
     end
 })
 
--- FOV Toggle with Keybind
 secplayer:AddToggle({
     text = "FOV",
     state = false,
-    risky = false,
     tooltip = "Toggle custom field of view",
     flag = "Toggle_FOV",
     callback = function(state)
         toggleFOV(state)
     end
 }):AddBind({
-    enabled = true,
     text = "FOV Key",
     tooltip = "Hotkey to toggle FOV",
     mode = "toggle",
     bind = "None",
-    state = false,
-    nomouse = false,
-    risky = false,
-    noindicator = false,
     callback = function(v)
         toggleFOV(v)
     end
 })
 
--- FullBright Toggle with Keybind (NEW)
 secplayer:AddToggle({
     text = "FullBright",
     state = false,
-    risky = false,
     tooltip = "Toggle full brightness lighting",
     flag = "Toggle_FullBright",
     callback = function(state)
         toggleFullBright(state)
     end
 }):AddBind({
-    enabled = true,
     text = "FullBright Key",
     tooltip = "Hotkey to toggle full brightness",
     mode = "toggle",
     bind = "None",
-    state = false,
-    nomouse = false,
-    risky = false,
-    noindicator = false,
     callback = function(v)
         toggleFullBright(v)
     end
 })
 
--- Cleanup on unload
-if _G.PlayerTab.AddCleanup then
-    _G.PlayerTab:AddCleanup(cleanupStats)
-end
-
 -- Store helper functions
-secplayer.DisableStats = cleanupStats
-secplayer.GetMovementMethod = function()
-    return currentMovementMethod
+if secplayer then
+    secplayer.DisableStats = cleanupStats
+    secplayer.GetMovementMethod = function()
+        return currentMovementMethod
+    end
 end
-
-
-
-
-
-
-
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-
-local player = Players.LocalPlayer
-local character = player.Character
-local humanoid = character and character:WaitForChild("Humanoid", 5)
 
 -- Character Customization Section
 local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
-seccharacter:AddSeparator({ enabled = true, text = "Character Effects" })
+seccharacter:AddSeparator({ text = "Character Effects" })
 
 -- State for character effects
 local characterEffects = {
@@ -846,8 +764,8 @@ local function storeOriginalColors()
             end
         end
     end
-    -- Store properties for Arsenal viewmodel arms if they exist
-    local arms = Workspace.Camera:FindFirstChild("Arms")
+    
+    local arms = workspace.Camera:FindFirstChild("Arms")
     if arms then
         for _, obj in ipairs(arms:GetDescendants()) do
             if (obj:IsA("MeshPart") or obj:IsA("BasePart") or obj:IsA("UnionOperation")) and obj.Parent then
@@ -894,7 +812,6 @@ local function applyRainbowEffect()
     local hue = (tick() * characterEffects.rainbowSpeed) % 1
     local color = Color3.fromHSV(hue, 1, 1)
     
-    -- Character rainbow effect
     for _, obj in ipairs(character:GetDescendants()) do
         if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
             obj.Color = color
@@ -907,46 +824,12 @@ local function applyRainbowEffect()
         end
     end
     
-    -- Arsenal viewmodel arms rainbow effect
-    local arms = Workspace.Camera:FindFirstChild("Arms")
+    local arms = workspace.Camera:FindFirstChild("Arms")
     if arms then
         for _, v in ipairs(arms:GetDescendants()) do
             if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
                 local zigzagHue = zigzag(characterEffects.zigzagCounter)
                 v.Color = Color3.fromHSV(zigzagHue, 1, 1)
-                if characterEffects.transparencyEnabled then
-                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceAppearance then
-                        surfaceAppearance.Transparency = characterEffects.transparencyValue
-                    end
-                end
-            end
-        end
-        characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
-    end
-end
-
--- Function to apply custom color
-local function applyCustomColor()
-    if not character then return end
-    
-    for _, obj in ipairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
-            obj.Color = characterEffects.customColor
-            if characterEffects.transparencyEnabled then
-                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceAppearance then
-                    surfaceAppearance.Transparency = characterEffects.transparencyValue
-                end
-            end
-        end
-    end
-    
-    local arms = Workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, v in ipairs(arms:GetDescendants()) do
-            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
-                v.Color = characterEffects.customColor
                 if characterEffects.transparencyEnabled then
                     local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
                     if surfaceAppearance then
@@ -968,7 +851,7 @@ local function applyMaterial()
         end
     end
     
-    local arms = Workspace.Camera:FindFirstChild("Arms")
+    local arms = workspace.Camera:FindFirstChild("Arms")
     if arms then
         for _, v in ipairs(arms:GetDescendants()) do
             if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
@@ -994,7 +877,7 @@ local function applyTransparency()
         end
     end
     
-    local arms = Workspace.Camera:FindFirstChild("Arms")
+    local arms = workspace.Camera:FindFirstChild("Arms")
     if arms then
         for _, v in ipairs(arms:GetDescendants()) do
             if ((v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation") or v:IsA("Decal") or v:IsA("Texture")) and v.Parent) then
@@ -1014,7 +897,6 @@ end
 seccharacter:AddToggle({
     text = "Rainbow Character",
     state = false,
-    risky = false,
     tooltip = "Makes your character cycle through rainbow colors",
     flag = "Toggle_Rainbow",
     callback = function(state)
@@ -1049,7 +931,6 @@ seccharacter:AddToggle({
 
 -- Rainbow Speed Slider
 seccharacter:AddSlider({
-    enabled = true,
     text = "Rainbow Speed",
     tooltip = "Adjust the speed of the rainbow effect",
     flag = "rainbowspeed",
@@ -1062,13 +943,12 @@ seccharacter:AddSlider({
     end
 })
 
-seccharacter:AddSeparator({ enabled = true, text = "" })
+seccharacter:AddSeparator({ text = "" })
 
 -- Custom Color Toggle
 seccharacter:AddToggle({
     text = "Custom Color",
     state = false,
-    risky = false,
     tooltip = "Apply a custom color to your character",
     flag = "Toggle_CustomColor",
     callback = function(state)
@@ -1098,12 +978,10 @@ seccharacter:AddToggle({
 
 -- Color Picker
 seccharacter:AddColor({
-    enabled = true,
     text = "Character Color",
     tooltip = "Choose a color for your character",
     color = characterEffects.customColor,
     trans = 0,
-    open = false,
     callback = function(color)
         characterEffects.customColor = color
         if characterEffects.customColorEnabled then
@@ -1112,13 +990,12 @@ seccharacter:AddColor({
     end
 })
 
-seccharacter:AddSeparator({ enabled = true, text = "" })
+seccharacter:AddSeparator({ text = "" })
 
 -- Material Toggle
 seccharacter:AddToggle({
     text = "Custom Material",
     state = false,
-    risky = false,
     tooltip = "Apply a custom material to your character",
     flag = "Toggle_Material",
     callback = function(state)
@@ -1137,12 +1014,10 @@ seccharacter:AddToggle({
 
 -- Material Dropdown
 seccharacter:AddList({
-    enabled = true,
     text = "Material Type",
     tooltip = "Select character material",
     selected = "ForceField",
     multi = false,
-    open = false,
     max = 10,
     values = {
         "ForceField", "Neon", "Glass", "Plastic", "Wood", "Slate", "Concrete",
@@ -1150,7 +1025,6 @@ seccharacter:AddList({
         "Granite", "Brick", "Pebble", "Sand", "Fabric", "SmoothPlastic",
         "Metal", "WoodPlanks", "Cobblestone"
     },
-    risky = false,
     callback = function(v)
         characterEffects.selectedMaterial = v
         if characterEffects.materialEnabled then
@@ -1159,13 +1033,12 @@ seccharacter:AddList({
     end
 })
 
-seccharacter:AddSeparator({ enabled = true, text = "" })
+seccharacter:AddSeparator({ text = "" })
 
 -- Transparency Toggle
 seccharacter:AddToggle({
     text = "Character Transparency",
     state = false,
-    risky = false,
     tooltip = "Make your character transparent",
     flag = "Toggle_Transparency",
     callback = function(state)
@@ -1184,7 +1057,6 @@ seccharacter:AddToggle({
 
 -- Transparency Slider
 seccharacter:AddSlider({
-    enabled = true,
     text = "Transparency Level",
     tooltip = "Adjust character transparency",
     flag = "transparencylevel",
@@ -1218,28 +1090,27 @@ local function handleNewArms()
     end
 end
 
-Workspace.Camera.ChildAdded:Connect(function(child)
-    if child.Name == "Arms" then
-        task.wait(0.1) -- Wait briefly for the model to fully load
-        handleNewArms()
-    end
-end)
-
--- Monitor for Arms model removal
-Workspace.Camera.ChildRemoved:Connect(function(child)
-    if child.Name == "Arms" then
-        -- Clear Arms-related original colors to prevent memory leaks
-        local newOriginalColors = {}
-        for obj, properties in pairs(characterEffects.originalColors) do
-            if obj.Parent and obj.Parent ~= Workspace.Camera:FindFirstChild("Arms") then
-                newOriginalColors[obj] = properties
-            end
+if workspace.Camera then
+    workspace.Camera.ChildAdded:Connect(function(child)
+        if child.Name == "Arms" then
+            task.wait(0.1)
+            handleNewArms()
         end
-        characterEffects.originalColors = newOriginalColors
-        -- Reapply effects to character only
-        updateCharacterEffects()
-    end
-end)
+    end)
+
+    workspace.Camera.ChildRemoved:Connect(function(child)
+        if child.Name == "Arms" then
+            local newOriginalColors = {}
+            for obj, properties in pairs(characterEffects.originalColors) do
+                if obj.Parent and obj.Parent ~= workspace.Camera:FindFirstChild("Arms") then
+                    newOriginalColors[obj] = properties
+                end
+            end
+            characterEffects.originalColors = newOriginalColors
+            updateCharacterEffects()
+        end
+    end)
+end
 
 -- Update character effects when character respawns
 local function updateCharacterEffects()
@@ -1291,6 +1162,47 @@ local function cleanupCharacterEffects()
     characterEffects.zigzagCounter = 1
 end
 
-if seccharacter.AddCleanup then
-    seccharacter:AddCleanup(cleanupCharacterEffects)
+-- Final cleanup on script end
+if cleanupStats then
+    local originalCleanup = cleanupStats
+    cleanupStats = function()
+        originalCleanup()
+        cleanupCharacterEffects()
+    end
 end
+
+-- Ensure player section is marked as loaded
+_G.CROW:SendNotification("Player section loaded successfully", 2) surfaceAppearance then
+                        surfaceAppearance.Transparency = characterEffects.transparencyValue
+                    end
+                end
+            end
+        end
+        characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
+    end
+end
+
+-- Function to apply custom color
+local function applyCustomColor()
+    if not character then return end
+    
+    for _, obj in ipairs(character:GetDescendants()) do
+        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
+            obj.Color = characterEffects.customColor
+            if characterEffects.transparencyEnabled then
+                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+                if surfaceAppearance then
+                    surfaceAppearance.Transparency = characterEffects.transparencyValue
+                end
+            end
+        end
+    end
+    
+    local arms = workspace.Camera:FindFirstChild("Arms")
+    if arms then
+        for _, v in ipairs(arms:GetDescendants()) do
+            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
+                v.Color = characterEffects.customColor
+                if characterEffects.transparencyEnabled then
+                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
+                    if
