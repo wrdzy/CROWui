@@ -713,542 +713,544 @@ secplayer:AddToggle({
     end
 })
 
--- Character Customization Section
-local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
-seccharacter:AddSeparator({ text = "Character Effects" })
 
--- State for character effects
-local characterEffects = {
-    rainbowEnabled = false,
-    customColorEnabled = false,
-    customColor = Color3.fromRGB(255, 255, 255),
-    rainbowSpeed = 1,
-    rainbowConnection = nil,
-    originalColors = {},
-    materialEnabled = false,
-    selectedMaterial = "ForceField",
-    transparencyEnabled = false,
-    transparencyValue = 0.5,
-    zigzagCounter = 1
-}
+--=============================CUSTOMISATION============================
+-- -- Character Customization Section
+-- local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
+-- seccharacter:AddSeparator({ text = "Character Effects" })
 
--- Zigzag function for rainbow effect
-local function zigzag(X)
-    return math.acos(math.cos(X * math.pi)) / math.pi
-end
+-- -- State for character effects
+-- local characterEffects = {
+--     rainbowEnabled = false,
+--     customColorEnabled = false,
+--     customColor = Color3.fromRGB(255, 255, 255),
+--     rainbowSpeed = 1,
+--     rainbowConnection = nil,
+--     originalColors = {},
+--     materialEnabled = false,
+--     selectedMaterial = "ForceField",
+--     transparencyEnabled = false,
+--     transparencyValue = 0.5,
+--     zigzagCounter = 1
+-- }
 
--- Function to store original properties
-local function storeOriginalColors()
-    characterEffects.originalColors = {}
-    if character then
-        for _, obj in ipairs(character:GetDescendants()) do
-            -- Include Head but handle accessories/hats separately
-            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
-               obj.Name ~= "HumanoidRootPart" then
-                -- Check if the part is inside an accessory
-                local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
-                characterEffects.originalColors[obj] = {
-                    Color = obj.Color,
-                    Material = obj.Material,
-                    Transparency = obj.Transparency,
-                    SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil,
-                    IsAccessory = isAccessory -- Track if it's an accessory
-                }
-            elseif (obj:IsA("Decal") or obj:IsA("Texture")) then
-                -- Include face decal but mark it specially
-                characterEffects.originalColors[obj] = {
-                    Transparency = obj.Transparency,
-                    IsFace = obj.Name == "face"
-                }
-            end
-        end
-    end
+-- -- Zigzag function for rainbow effect
+-- local function zigzag(X)
+--     return math.acos(math.cos(X * math.pi)) / math.pi
+-- end
+
+-- -- Function to store original properties
+-- local function storeOriginalColors()
+--     characterEffects.originalColors = {}
+--     if character then
+--         for _, obj in ipairs(character:GetDescendants()) do
+--             -- Include Head but handle accessories/hats separately
+--             if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+--                obj.Name ~= "HumanoidRootPart" then
+--                 -- Check if the part is inside an accessory
+--                 local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+--                 characterEffects.originalColors[obj] = {
+--                     Color = obj.Color,
+--                     Material = obj.Material,
+--                     Transparency = obj.Transparency,
+--                     SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil,
+--                     IsAccessory = isAccessory -- Track if it's an accessory
+--                 }
+--             elseif (obj:IsA("Decal") or obj:IsA("Texture")) then
+--                 -- Include face decal but mark it specially
+--                 characterEffects.originalColors[obj] = {
+--                     Transparency = obj.Transparency,
+--                     IsFace = obj.Name == "face"
+--                 }
+--             end
+--         end
+--     end
     
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, obj in ipairs(arms:GetDescendants()) do
-            if (obj:IsA("MeshPart") or obj:IsA("BasePart") or obj:IsA("UnionOperation")) and obj.Parent then
-                characterEffects.originalColors[obj] = {
-                    Color = obj.Color,
-                    Material = obj.Material,
-                    Transparency = obj.Transparency,
-                    SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil,
-                    IsArms = true
-                }
-            end
-        end
-    end
-end
+--     local arms = workspace.Camera:FindFirstChild("Arms")
+--     if arms then
+--         for _, obj in ipairs(arms:GetDescendants()) do
+--             if (obj:IsA("MeshPart") or obj:IsA("BasePart") or obj:IsA("UnionOperation")) and obj.Parent then
+--                 characterEffects.originalColors[obj] = {
+--                     Color = obj.Color,
+--                     Material = obj.Material,
+--                     Transparency = obj.Transparency,
+--                     SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil,
+--                     IsArms = true
+--                 }
+--             end
+--         end
+--     end
+-- end
 
--- Function to restore original properties
-local function restoreOriginalColors()
-    for obj, properties in pairs(characterEffects.originalColors) do
-        if obj and obj.Parent then
-            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and 
-               obj.Name ~= "HumanoidRootPart" then
-                obj.Color = properties.Color
-                if not characterEffects.materialEnabled then
-                    obj.Material = properties.Material
-                end
-                if not characterEffects.transparencyEnabled then
-                    obj.Transparency = properties.Transparency
-                    local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceAppearance and properties.SurfaceAppearance then
-                        surfaceAppearance.Transparency = properties.SurfaceAppearance
-                    end
-                end
-            elseif (obj:IsA("Decal") or obj:IsA("Texture")) then
-                if not characterEffects.transparencyEnabled then
-                    obj.Transparency = properties.Transparency
-                end
-            end
-        end
-    end
-end
+-- -- Function to restore original properties
+-- local function restoreOriginalColors()
+--     for obj, properties in pairs(characterEffects.originalColors) do
+--         if obj and obj.Parent then
+--             if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and 
+--                obj.Name ~= "HumanoidRootPart" then
+--                 obj.Color = properties.Color
+--                 if not characterEffects.materialEnabled then
+--                     obj.Material = properties.Material
+--                 end
+--                 if not characterEffects.transparencyEnabled then
+--                     obj.Transparency = properties.Transparency
+--                     local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+--                     if surfaceAppearance and properties.SurfaceAppearance then
+--                         surfaceAppearance.Transparency = properties.SurfaceAppearance
+--                     end
+--                 end
+--             elseif (obj:IsA("Decal") or obj:IsA("Texture")) then
+--                 if not characterEffects.transparencyEnabled then
+--                     obj.Transparency = properties.Transparency
+--                 end
+--             end
+--         end
+--     end
+-- end
 
--- Function to apply rainbow effect
-local function applyRainbowEffect()
-    if not character then return end
+-- -- Function to apply rainbow effect
+-- local function applyRainbowEffect()
+--     if not character then return end
     
-    local hue = (tick() * characterEffects.rainbowSpeed) % 1
-    local color = Color3.fromHSV(hue, 1, 1)
+--     local hue = (tick() * characterEffects.rainbowSpeed) % 1
+--     local color = Color3.fromHSV(hue, 1, 1)
     
-    for _, obj in ipairs(character:GetDescendants()) do
-        -- Include Head but handle accessories carefully
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
-           obj.Name ~= "HumanoidRootPart" then
-            -- Check if it's an accessory part
-            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+--     for _, obj in ipairs(character:GetDescendants()) do
+--         -- Include Head but handle accessories carefully
+--         if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+--            obj.Name ~= "HumanoidRootPart" then
+--             -- Check if it's an accessory part
+--             local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
             
-            -- Apply color to all parts including head, but be careful with accessories
-            if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
-                obj.Color = color
-            end
+--             -- Apply color to all parts including head, but be careful with accessories
+--             if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
+--                 obj.Color = color
+--             end
             
-            if characterEffects.transparencyEnabled then
-                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceAppearance then
-                    surfaceAppearance.Transparency = characterEffects.transparencyValue
-                end
-            end
-        end
-    end
+--             if characterEffects.transparencyEnabled then
+--                 local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+--                 if surfaceAppearance then
+--                     surfaceAppearance.Transparency = characterEffects.transparencyValue
+--                 end
+--             end
+--         end
+--     end
     
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, v in ipairs(arms:GetDescendants()) do
-            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
-                local zigzagHue = zigzag(characterEffects.zigzagCounter)
-                v.Color = Color3.fromHSV(zigzagHue, 1, 1)
-                if characterEffects.transparencyEnabled then
-                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceAppearance then
-                        surfaceAppearance.Transparency = characterEffects.transparencyValue
-                    end
-                end
-            end
-        end
-        characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
-    end
-end
+--     local arms = workspace.Camera:FindFirstChild("Arms")
+--     if arms then
+--         for _, v in ipairs(arms:GetDescendants()) do
+--             if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
+--                 local zigzagHue = zigzag(characterEffects.zigzagCounter)
+--                 v.Color = Color3.fromHSV(zigzagHue, 1, 1)
+--                 if characterEffects.transparencyEnabled then
+--                     local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
+--                     if surfaceAppearance then
+--                         surfaceAppearance.Transparency = characterEffects.transparencyValue
+--                     end
+--                 end
+--             end
+--         end
+--         characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
+--     end
+-- end
 
--- Function to apply custom color
-local function applyCustomColor()
-    if not character then return end
+-- -- Function to apply custom color
+-- local function applyCustomColor()
+--     if not character then return end
     
-    for _, obj in ipairs(character:GetDescendants()) do
-        -- Include Head but handle accessories carefully
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
-           obj.Name ~= "HumanoidRootPart" then
-            -- Check if it's an accessory part
-            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+--     for _, obj in ipairs(character:GetDescendants()) do
+--         -- Include Head but handle accessories carefully
+--         if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+--            obj.Name ~= "HumanoidRootPart" then
+--             -- Check if it's an accessory part
+--             local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
             
-            -- Apply color to all parts including head, but be careful with accessories
-            if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
-                obj.Color = characterEffects.customColor
-            end
+--             -- Apply color to all parts including head, but be careful with accessories
+--             if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
+--                 obj.Color = characterEffects.customColor
+--             end
             
-            if characterEffects.transparencyEnabled then
-                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceAppearance then
-                    surfaceAppearance.Transparency = characterEffects.transparencyValue
-                end
-            end
-        end
-    end
+--             if characterEffects.transparencyEnabled then
+--                 local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+--                 if surfaceAppearance then
+--                     surfaceAppearance.Transparency = characterEffects.transparencyValue
+--                 end
+--             end
+--         end
+--     end
     
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, v in ipairs(arms:GetDescendants()) do
-            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
-                v.Color = characterEffects.customColor
-                if characterEffects.transparencyEnabled then
-                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceAppearance then
-                        surfaceAppearance.Transparency = characterEffects.transparencyValue
-                    end
-                end
-            end
-        end
-    end
-end
+--     local arms = workspace.Camera:FindFirstChild("Arms")
+--     if arms then
+--         for _, v in ipairs(arms:GetDescendants()) do
+--             if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
+--                 v.Color = characterEffects.customColor
+--                 if characterEffects.transparencyEnabled then
+--                     local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
+--                     if surfaceAppearance then
+--                         surfaceAppearance.Transparency = characterEffects.transparencyValue
+--                     end
+--                 end
+--             end
+--         end
+--     end
+-- end
 
--- Function to apply material
-local function applyMaterial()
-    if not character then return end
+-- -- Function to apply material
+-- local function applyMaterial()
+--     if not character then return end
     
-    for _, obj in ipairs(character:GetDescendants()) do
-        -- Include Head but handle accessories carefully
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
-           obj.Name ~= "HumanoidRootPart" then
-            -- Check if it's an accessory part
-            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+--     for _, obj in ipairs(character:GetDescendants()) do
+--         -- Include Head but handle accessories carefully
+--         if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+--            obj.Name ~= "HumanoidRootPart" then
+--             -- Check if it's an accessory part
+--             local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
             
-            -- Apply material to all parts including head, but be careful with accessories
-            if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
-                obj.Material = Enum.Material[characterEffects.selectedMaterial]
-            end
-        end
-    end
+--             -- Apply material to all parts including head, but be careful with accessories
+--             if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
+--                 obj.Material = Enum.Material[characterEffects.selectedMaterial]
+--             end
+--         end
+--     end
     
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, v in ipairs(arms:GetDescendants()) do
-            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
-                v.Material = Enum.Material[characterEffects.selectedMaterial]
-            end
-        end
-    end
-end
+--     local arms = workspace.Camera:FindFirstChild("Arms")
+--     if arms then
+--         for _, v in ipairs(arms:GetDescendants()) do
+--             if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
+--                 v.Material = Enum.Material[characterEffects.selectedMaterial]
+--             end
+--         end
+--     end
+-- end
 
--- Function to apply transparency
-local function applyTransparency()
-    if not character then return end
+-- -- Function to apply transparency
+-- local function applyTransparency()
+--     if not character then return end
     
-    for _, obj in ipairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Name ~= "HumanoidRootPart" and obj.Parent then
-            -- Check if it's an accessory part
-            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+--     for _, obj in ipairs(character:GetDescendants()) do
+--         if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Name ~= "HumanoidRootPart" and obj.Parent then
+--             -- Check if it's an accessory part
+--             local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
             
-            -- Apply transparency but handle accessories carefully (some accessories don't work well with transparency)
-            if not isAccessory then
-                -- Apply to body parts including head
-                obj.Transparency = characterEffects.transparencyValue
-                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceAppearance then
-                    surfaceAppearance.Transparency = characterEffects.transparencyValue
-                end
-            else
-                -- For accessories, only apply to handle and use reduced transparency to avoid issues
-                if obj.Name == "Handle" then
-                    local reducedTransparency = math.min(characterEffects.transparencyValue * 0.7, 0.8) -- Limit accessory transparency
-                    obj.Transparency = reducedTransparency
-                    local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceAppearance then
-                        surfaceAppearance.Transparency = reducedTransparency
-                    end
-                end
-            end
-        elseif (obj:IsA("Decal") or obj:IsA("Texture")) and obj.Parent then
-            -- Handle face separately - apply reduced transparency to face
-            if obj.Name == "face" then
-                obj.Transparency = math.min(characterEffects.transparencyValue * 0.5, 0.7) -- Reduced face transparency
-            else
-                obj.Transparency = characterEffects.transparencyValue
-            end
-        end
-    end
+--             -- Apply transparency but handle accessories carefully (some accessories don't work well with transparency)
+--             if not isAccessory then
+--                 -- Apply to body parts including head
+--                 obj.Transparency = characterEffects.transparencyValue
+--                 local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+--                 if surfaceAppearance then
+--                     surfaceAppearance.Transparency = characterEffects.transparencyValue
+--                 end
+--             else
+--                 -- For accessories, only apply to handle and use reduced transparency to avoid issues
+--                 if obj.Name == "Handle" then
+--                     local reducedTransparency = math.min(characterEffects.transparencyValue * 0.7, 0.8) -- Limit accessory transparency
+--                     obj.Transparency = reducedTransparency
+--                     local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+--                     if surfaceAppearance then
+--                         surfaceAppearance.Transparency = reducedTransparency
+--                     end
+--                 end
+--             end
+--         elseif (obj:IsA("Decal") or obj:IsA("Texture")) and obj.Parent then
+--             -- Handle face separately - apply reduced transparency to face
+--             if obj.Name == "face" then
+--                 obj.Transparency = math.min(characterEffects.transparencyValue * 0.5, 0.7) -- Reduced face transparency
+--             else
+--                 obj.Transparency = characterEffects.transparencyValue
+--             end
+--         end
+--     end
     
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, v in ipairs(arms:GetDescendants()) do
-            if ((v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation") or v:IsA("Decal") or v:IsA("Texture")) and v.Parent) then
-                v.Transparency = characterEffects.transparencyValue
-                if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) then
-                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
-                    if surfaceAppearance then
-                        surfaceAppearance.Transparency = characterEffects.transparencyValue
-                    end
-                end
-            end
-        end
-    end
-end
+--     local arms = workspace.Camera:FindFirstChild("Arms")
+--     if arms then
+--         for _, v in ipairs(arms:GetDescendants()) do
+--             if ((v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation") or v:IsA("Decal") or v:IsA("Texture")) and v.Parent) then
+--                 v.Transparency = characterEffects.transparencyValue
+--                 if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) then
+--                     local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
+--                     if surfaceAppearance then
+--                         surfaceAppearance.Transparency = characterEffects.transparencyValue
+--                     end
+--                 end
+--             end
+--         end
+--     end
+-- end
 
--- Rainbow Toggle
-seccharacter:AddToggle({
-    text = "Rainbow Character",
-    state = false,
-    tooltip = "Makes your character cycle through rainbow colors",
-    flag = "Toggle_Rainbow",
-    callback = function(state)
-        characterEffects.rainbowEnabled = state
+-- -- Rainbow Toggle
+-- seccharacter:AddToggle({
+--     text = "Rainbow Character",
+--     state = false,
+--     tooltip = "Makes your character cycle through rainbow colors",
+--     flag = "Toggle_Rainbow",
+--     callback = function(state)
+--         characterEffects.rainbowEnabled = state
         
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
+--         if state then
+--             if next(characterEffects.originalColors) == nil then
+--                 storeOriginalColors()
+--             end
             
-            if characterEffects.customColorEnabled then
-                characterEffects.customColorEnabled = false
-            end
+--             if characterEffects.customColorEnabled then
+--                 characterEffects.customColorEnabled = false
+--             end
             
-            if characterEffects.rainbowConnection then
-                characterEffects.rainbowConnection:Disconnect()
-            end
+--             if characterEffects.rainbowConnection then
+--                 characterEffects.rainbowConnection:Disconnect()
+--             end
             
-            characterEffects.rainbowConnection = RunService.Heartbeat:Connect(applyRainbowEffect)
-        else
-            if characterEffects.rainbowConnection then
-                characterEffects.rainbowConnection:Disconnect()
-                characterEffects.rainbowConnection = nil
-            end
+--             characterEffects.rainbowConnection = RunService.Heartbeat:Connect(applyRainbowEffect)
+--         else
+--             if characterEffects.rainbowConnection then
+--                 characterEffects.rainbowConnection:Disconnect()
+--                 characterEffects.rainbowConnection = nil
+--             end
             
-            if not characterEffects.customColorEnabled then
-                restoreOriginalColors()
-            end
-        end
-    end
-})
+--             if not characterEffects.customColorEnabled then
+--                 restoreOriginalColors()
+--             end
+--         end
+--     end
+-- })
 
--- Rainbow Speed Slider
-seccharacter:AddSlider({
-    text = "Rainbow Speed",
-    tooltip = "Adjust the speed of the rainbow effect",
-    flag = "rainbowspeed",
-    min = 0.1,
-    max = 5,
-    increment = 0.1,
-    default = 1,
-    callback = function(v)
-        characterEffects.rainbowSpeed = v
-    end
-})
+-- -- Rainbow Speed Slider
+-- seccharacter:AddSlider({
+--     text = "Rainbow Speed",
+--     tooltip = "Adjust the speed of the rainbow effect",
+--     flag = "rainbowspeed",
+--     min = 0.1,
+--     max = 5,
+--     increment = 0.1,
+--     default = 1,
+--     callback = function(v)
+--         characterEffects.rainbowSpeed = v
+--     end
+-- })
 
-seccharacter:AddSeparator({ text = "" })
+-- seccharacter:AddSeparator({ text = "" })
 
--- Custom Color Toggle
-seccharacter:AddToggle({
-    text = "Custom Color",
-    state = false,
-    tooltip = "Apply a custom color to your character",
-    flag = "Toggle_CustomColor",
-    callback = function(state)
-        characterEffects.customColorEnabled = state
+-- -- Custom Color Toggle
+-- seccharacter:AddToggle({
+--     text = "Custom Color",
+--     state = false,
+--     tooltip = "Apply a custom color to your character",
+--     flag = "Toggle_CustomColor",
+--     callback = function(state)
+--         characterEffects.customColorEnabled = state
         
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
+--         if state then
+--             if next(characterEffects.originalColors) == nil then
+--                 storeOriginalColors()
+--             end
             
-            if characterEffects.rainbowEnabled then
-                characterEffects.rainbowEnabled = false
-                if characterEffects.rainbowConnection then
-                    characterEffects.rainbowConnection:Disconnect()
-                    characterEffects.rainbowConnection = nil
-                end
-            end
+--             if characterEffects.rainbowEnabled then
+--                 characterEffects.rainbowEnabled = false
+--                 if characterEffects.rainbowConnection then
+--                     characterEffects.rainbowConnection:Disconnect()
+--                     characterEffects.rainbowConnection = nil
+--                 end
+--             end
             
-            applyCustomColor()
-        else
-            if not characterEffects.rainbowEnabled then
-                restoreOriginalColors()
-            end
-        end
-    end
-})
+--             applyCustomColor()
+--         else
+--             if not characterEffects.rainbowEnabled then
+--                 restoreOriginalColors()
+--             end
+--         end
+--     end
+-- })
 
--- Color Picker
-seccharacter:AddColor({
-    text = "Character Color",
-    tooltip = "Choose a color for your character",
-    color = characterEffects.customColor,
-    trans = 0,
-    callback = function(color)
-        characterEffects.customColor = color
-        if characterEffects.customColorEnabled then
-            applyCustomColor()
-        end
-    end
-})
+-- -- Color Picker
+-- seccharacter:AddColor({
+--     text = "Character Color",
+--     tooltip = "Choose a color for your character",
+--     color = characterEffects.customColor,
+--     trans = 0,
+--     callback = function(color)
+--         characterEffects.customColor = color
+--         if characterEffects.customColorEnabled then
+--             applyCustomColor()
+--         end
+--     end
+-- })
 
-seccharacter:AddSeparator({ text = "" })
+-- seccharacter:AddSeparator({ text = "" })
 
--- Material Toggle
-seccharacter:AddToggle({
-    text = "Custom Material",
-    state = false,
-    tooltip = "Apply a custom material to your character",
-    flag = "Toggle_Material",
-    callback = function(state)
-        characterEffects.materialEnabled = state
+-- -- Material Toggle
+-- seccharacter:AddToggle({
+--     text = "Custom Material",
+--     state = false,
+--     tooltip = "Apply a custom material to your character",
+--     flag = "Toggle_Material",
+--     callback = function(state)
+--         characterEffects.materialEnabled = state
         
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
-            applyMaterial()
-        else
-            restoreOriginalColors()
-        end
-    end
-})
+--         if state then
+--             if next(characterEffects.originalColors) == nil then
+--                 storeOriginalColors()
+--             end
+--             applyMaterial()
+--         else
+--             restoreOriginalColors()
+--         end
+--     end
+-- })
 
--- Material Dropdown
-seccharacter:AddList({
-    text = "Material Type",
-    tooltip = "Select character material",
-    selected = "ForceField",
-    multi = false,
-    max = 10,
-    values = {
-        "ForceField", "Neon", "Glass", "Plastic", "Wood", "Slate", "Concrete",
-        "CorrodedMetal", "DiamondPlate", "Foil", "Grass", "Ice", "Marble",
-        "Granite", "Brick", "Pebble", "Sand", "Fabric", "SmoothPlastic",
-        "Metal", "WoodPlanks", "Cobblestone"
-    },
-    callback = function(v)
-        characterEffects.selectedMaterial = v
-        if characterEffects.materialEnabled then
-            applyMaterial()
-        end
-    end
-})
+-- -- Material Dropdown
+-- seccharacter:AddList({
+--     text = "Material Type",
+--     tooltip = "Select character material",
+--     selected = "ForceField",
+--     multi = false,
+--     max = 10,
+--     values = {
+--         "ForceField", "Neon", "Glass", "Plastic", "Wood", "Slate", "Concrete",
+--         "CorrodedMetal", "DiamondPlate", "Foil", "Grass", "Ice", "Marble",
+--         "Granite", "Brick", "Pebble", "Sand", "Fabric", "SmoothPlastic",
+--         "Metal", "WoodPlanks", "Cobblestone"
+--     },
+--     callback = function(v)
+--         characterEffects.selectedMaterial = v
+--         if characterEffects.materialEnabled then
+--             applyMaterial()
+--         end
+--     end
+-- })
 
-seccharacter:AddSeparator({ text = "" })
+-- seccharacter:AddSeparator({ text = "" })
 
--- Transparency Toggle
-seccharacter:AddToggle({
-    text = "Character Transparency",
-    state = false,
-    tooltip = "Make your character transparent",
-    flag = "Toggle_Transparency",
-    callback = function(state)
-        characterEffects.transparencyEnabled = state
+-- -- Transparency Toggle
+-- seccharacter:AddToggle({
+--     text = "Character Transparency",
+--     state = false,
+--     tooltip = "Make your character transparent",
+--     flag = "Toggle_Transparency",
+--     callback = function(state)
+--         characterEffects.transparencyEnabled = state
         
-        if state then
-            if next(characterEffects.originalColors) == nil then
-                storeOriginalColors()
-            end
-            applyTransparency()
-        else
-            restoreOriginalColors()
-        end
-    end
-})
+--         if state then
+--             if next(characterEffects.originalColors) == nil then
+--                 storeOriginalColors()
+--             end
+--             applyTransparency()
+--         else
+--             restoreOriginalColors()
+--         end
+--     end
+-- })
 
--- Transparency Slider
-seccharacter:AddSlider({
-    text = "Transparency Level",
-    tooltip = "Adjust character transparency",
-    flag = "transparencylevel",
-    min = 0,
-    max = 0.95,
-    increment = 0.05,
-    default = 0.5,
-    callback = function(v)
-        characterEffects.transparencyValue = v
-        if characterEffects.transparencyEnabled then
-            applyTransparency()
-        end
-    end
-})
+-- -- Transparency Slider
+-- seccharacter:AddSlider({
+--     text = "Transparency Level",
+--     tooltip = "Adjust character transparency",
+--     flag = "transparencylevel",
+--     min = 0,
+--     max = 0.95,
+--     increment = 0.05,
+--     default = 0.5,
+--     callback = function(v)
+--         characterEffects.transparencyValue = v
+--         if characterEffects.transparencyEnabled then
+--             applyTransparency()
+--         end
+--     end
+-- })
 
--- Monitor for new Arms model
-local function handleNewArms()
-    if characterEffects.rainbowEnabled or characterEffects.customColorEnabled or characterEffects.materialEnabled or characterEffects.transparencyEnabled then
-        storeOriginalColors()
-        if characterEffects.rainbowEnabled then
-            applyRainbowEffect()
-        elseif characterEffects.customColorEnabled then
-            applyCustomColor()
-        end
-        if characterEffects.materialEnabled then
-            applyMaterial()
-        end
-        if characterEffects.transparencyEnabled then
-            applyTransparency()
-        end
-    end
-end
+-- -- Monitor for new Arms model
+-- local function handleNewArms()
+--     if characterEffects.rainbowEnabled or characterEffects.customColorEnabled or characterEffects.materialEnabled or characterEffects.transparencyEnabled then
+--         storeOriginalColors()
+--         if characterEffects.rainbowEnabled then
+--             applyRainbowEffect()
+--         elseif characterEffects.customColorEnabled then
+--             applyCustomColor()
+--         end
+--         if characterEffects.materialEnabled then
+--             applyMaterial()
+--         end
+--         if characterEffects.transparencyEnabled then
+--             applyTransparency()
+--         end
+--     end
+-- end
 
-if workspace.Camera then
-    workspace.Camera.ChildAdded:Connect(function(child)
-        if child.Name == "Arms" then
-            task.wait(0.1)
-            handleNewArms()
-        end
-    end)
+-- if workspace.Camera then
+--     workspace.Camera.ChildAdded:Connect(function(child)
+--         if child.Name == "Arms" then
+--             task.wait(0.1)
+--             handleNewArms()
+--         end
+--     end)
 
-    workspace.Camera.ChildRemoved:Connect(function(child)
-        if child.Name == "Arms" then
-            local newOriginalColors = {}
-            for obj, properties in pairs(characterEffects.originalColors) do
-                if obj.Parent and obj.Parent ~= workspace.Camera:FindFirstChild("Arms") then
-                    newOriginalColors[obj] = properties
-                end
-            end
-            characterEffects.originalColors = newOriginalColors
-            updateCharacterEffects()
-        end
-    end)
-end
+--     workspace.Camera.ChildRemoved:Connect(function(child)
+--         if child.Name == "Arms" then
+--             local newOriginalColors = {}
+--             for obj, properties in pairs(characterEffects.originalColors) do
+--                 if obj.Parent and obj.Parent ~= workspace.Camera:FindFirstChild("Arms") then
+--                     newOriginalColors[obj] = properties
+--                 end
+--             end
+--             characterEffects.originalColors = newOriginalColors
+--             updateCharacterEffects()
+--         end
+--     end)
+-- end
 
--- Update character effects when character respawns
-local function updateCharacterEffects()
-    if character then
-        task.wait(0.5)
-        storeOriginalColors()
-        if characterEffects.rainbowEnabled then
-            if characterEffects.rainbowConnection then
-                characterEffects.rainbowConnection:Disconnect()
-            end
-            characterEffects.rainbowConnection = RunService.Heartbeat:Connect(applyRainbowEffect)
-        elseif characterEffects.customColorEnabled then
-            applyCustomColor()
-        end
-        if characterEffects.materialEnabled then
-            applyMaterial()
-        end
-        if characterEffects.transparencyEnabled then
-            applyTransparency()
-        end
-    end
-end
+-- -- Update character effects when character respawns
+-- local function updateCharacterEffects()
+--     if character then
+--         task.wait(0.5)
+--         storeOriginalColors()
+--         if characterEffects.rainbowEnabled then
+--             if characterEffects.rainbowConnection then
+--                 characterEffects.rainbowConnection:Disconnect()
+--             end
+--             characterEffects.rainbowConnection = RunService.Heartbeat:Connect(applyRainbowEffect)
+--         elseif characterEffects.customColorEnabled then
+--             applyCustomColor()
+--         end
+--         if characterEffects.materialEnabled then
+--             applyMaterial()
+--         end
+--         if characterEffects.transparencyEnabled then
+--             applyTransparency()
+--         end
+--     end
+-- end
 
--- Connect to character added event
-player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid", 5)
-    characterEffects.originalColors = {}
-    characterEffects.zigzagCounter = 1
-    updateCharacterEffects()
-end)
+-- -- Connect to character added event
+-- player.CharacterAdded:Connect(function(char)
+--     character = char
+--     humanoid = char:WaitForChild("Humanoid", 5)
+--     characterEffects.originalColors = {}
+--     characterEffects.zigzagCounter = 1
+--     updateCharacterEffects()
+-- end)
 
--- Initialize effects for existing character
-if character then
-    updateCharacterEffects()
-end
+-- -- Initialize effects for existing character
+-- if character then
+--     updateCharacterEffects()
+-- end
 
--- Cleanup function for character effects
-local function cleanupCharacterEffects()
-    if characterEffects.rainbowConnection then
-        characterEffects.rainbowConnection:Disconnect()
-        characterEffects.rainbowConnection = nil
-    end
-    restoreOriginalColors()
-    characterEffects.rainbowEnabled = false
-    characterEffects.customColorEnabled = false
-    characterEffects.materialEnabled = false
-    characterEffects.transparencyEnabled = false
-    characterEffects.zigzagCounter = 1
-end
+-- -- Cleanup function for character effects
+-- local function cleanupCharacterEffects()
+--     if characterEffects.rainbowConnection then
+--         characterEffects.rainbowConnection:Disconnect()
+--         characterEffects.rainbowConnection = nil
+--     end
+--     restoreOriginalColors()
+--     characterEffects.rainbowEnabled = false
+--     characterEffects.customColorEnabled = false
+--     characterEffects.materialEnabled = false
+--     characterEffects.transparencyEnabled = false
+--     characterEffects.zigzagCounter = 1
+-- end
 
--- Combine cleanup functions
-local function masterCleanup()
-    cleanupStats()
-    cleanupCharacterEffects()
-end
+-- -- Combine cleanup functions
+-- local function masterCleanup()
+--     cleanupStats()
+--     cleanupCharacterEffects()
+-- end
 
 -- Store helper functions for external access
 if secplayer then
