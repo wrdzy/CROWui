@@ -77,7 +77,8 @@ local states = {
     jumpEnabled = false,
     fovEnabled = false,
     noclipEnabled = false,
-    fullbrightEnabled = false
+    fullbrightEnabled = false,
+    flyEnabled = false
 }
 
 -- Movement State Tracking
@@ -98,7 +99,7 @@ local function trackConnection(connection, metadata)
 end
 
 -- Forward declarations for toggle functions
-local toggleSpeed, toggleJump, toggleFOV, toggleFullBright, toggleNoclip
+local toggleSpeed, toggleJump, toggleFOV, toggleFullBright, toggleNoclip, toggleFly
 
 -- Character Setup (called when character spawns or respawns)
 local function setupCharacter(char)
@@ -143,6 +144,7 @@ local function setupCharacter(char)
         if states.speedEnabled then toggleSpeed(true) end
         if states.jumpEnabled then toggleJump(true) end
         if states.noclipEnabled then toggleNoclip(true) end
+        if states.flyEnabled then toggleFly(true) end
     end)
 end
 
@@ -313,12 +315,7 @@ local function watchFOV()
     end), "fov_watcher")
 end
 
--- Noclip Functions
-local function enableNoclip()
-    if not character then return end
-    
-    -- Create noclip connection
-    trackConnection(RunService.Stepped:Connect(function()
+RunService.Stepped:Connect(function()
         if not character or not character.Parent then return end
         
         for _, part in pairs(character:GetDescendants()) do
@@ -356,49 +353,53 @@ local function disableNoclip()
     end
 end
 
--- Continuous property enforcement
+-- Optimized property enforcement with throttling
+local lastPropertyUpdate = 0
+local PROPERTY_UPDATE_INTERVAL = 0.05 -- Update every 0.05 seconds
+
 local function enforceProperties()
-    -- Check if character exists
-    if not workspace:FindFirstChild(player.Name) then
-        return
-    end
+    local now = tick()
+    if now - lastPropertyUpdate < PROPERTY_UPDATE_INTERVAL then return end
+    lastPropertyUpdate = now
     
+    -- Check if character exists
     if not character or not character.Parent then
-        character = workspace:FindFirstChild(player.Name)
+        character = player.Character
         if not character then return end
     end
     
-    if not character:FindFirstChild("Humanoid") then return end
     local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
     
-    -- FOV enforcement
-    if states.fovEnabled and camera and camera.FieldOfView ~= fovValue then
+    -- FOV enforcement (only if different)
+    if states.fovEnabled and camera and math.abs(camera.FieldOfView - fovValue) > 0.1 then
         camera.FieldOfView = fovValue
     end
     
-    -- Jump enforcement
+    -- Jump enforcement (only if different)
     if states.jumpEnabled and jumpPropertyName ~= "" then
-        if pcall(function() return humanoid[jumpPropertyName] end) then
-            if humanoid[jumpPropertyName] ~= jumpValue then
-                humanoid[jumpPropertyName] = jumpValue
-            end
+        local success, currentValue = pcall(function() return humanoid[jumpPropertyName] end)
+        if success and math.abs(currentValue - jumpValue) > 0.1 then
+            humanoid[jumpPropertyName] = jumpValue
         end
     end
     
-    -- Speed enforcement for Normal method
+    -- Speed enforcement for Normal method (only if different)
     if currentMovementMethod == "Normal" and states.speedEnabled then
-        if humanoid.WalkSpeed ~= speedValue then
+        if math.abs(humanoid.WalkSpeed - speedValue) > 0.1 then
             humanoid.WalkSpeed = speedValue
         end
     end
     
-    -- FullBright enforcement
-    if states.fullbrightEnabled then
-        Lighting.Brightness = 2
-        Lighting.ClockTime = 14
-        Lighting.FogEnd = 100000
-        Lighting.GlobalShadows = false
-        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+    -- FullBright enforcement (reduced frequency)
+    if states.fullbrightEnabled and now % 0.2 < PROPERTY_UPDATE_INTERVAL then
+        if Lighting.Brightness ~= 2 then Lighting.Brightness = 2 end
+        if Lighting.ClockTime ~= 14 then Lighting.ClockTime = 14 end
+        if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
+        if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
+        if Lighting.Ambient ~= Color3.fromRGB(178, 178, 178) then
+            Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        end
     end
 end
 
@@ -466,6 +467,16 @@ toggleNoclip = function(state)
         enableNoclip()
     else
         disableNoclip()
+    end
+end
+
+toggleFly = function(state)
+    states.flyEnabled = state
+    
+    if state then
+        enableFly()
+    else
+        disableFly()
     end
 end
 
@@ -568,11 +579,16 @@ local function cleanupStats()
         disableNoclip()
     end
     
+    if states.flyEnabled then
+        disableFly()
+    end
+    
     states.speedEnabled = false
     states.jumpEnabled = false
     states.fovEnabled = false
     states.noclipEnabled = false
     states.fullbrightEnabled = false
+    states.flyEnabled = false
 end
 
 -- UI ELEMENTS
@@ -679,6 +695,39 @@ secplayer:AddToggle({
     end
 })
 
+-- Fly Speed Slider
+local flySpeedSlider = secplayer:AddSlider({
+    text = "Fly Speed",
+    tooltip = "Adjust flying speed",
+    flag = "flyspeed",
+    min = 16,
+    max = 200,
+    increment = 1,
+    default = 50,
+    callback = function(v)
+        flySpeed = v
+    end
+})
+
+-- Fly Toggle with Keybind
+secplayer:AddToggle({
+    text = "Fly",
+    state = false,
+    tooltip = "Toggle fly mode - Use WASD to move in camera direction",
+    flag = "Toggle_Fly",
+    callback = function(state)
+        toggleFly(state)
+    end
+}):AddBind({
+    text = "Fly Key",
+    tooltip = "Hotkey to toggle fly mode",
+    mode = "toggle",
+    bind = "F",
+    callback = function(v)
+        toggleFly(v)
+    end
+})
+
 secplayer:AddSeparator({ text = "Misc" })
 
 local fovSlider = secplayer:AddSlider({
@@ -757,16 +806,32 @@ local function zigzag(X)
     return math.acos(math.cos(X * math.pi)) / math.pi
 end
 
--- Function to get all character parts safely
+-- Optimized character effects with caching and throttling
+local characterPartsCache = {}
+local lastPartsUpdate = 0
+local lastRainbowUpdate = 0
+local PARTS_CACHE_INTERVAL = 0.5 -- Update parts cache every 0.5 seconds
+local RAINBOW_UPDATE_INTERVAL = 1/60 -- 60 FPS for smooth rainbow
+
+-- Optimized function to get all character parts with caching
 local function getCharacterParts()
-    local parts = {}
-    if not character then return parts end
+    local now = tick()
     
-    -- Get character parts
+    -- Use cache if still valid
+    if now - lastPartsUpdate < PARTS_CACHE_INTERVAL and #characterPartsCache > 0 then
+        return characterPartsCache
+    end
+    
+    characterPartsCache = {}
+    lastPartsUpdate = now
+    
+    if not character then return characterPartsCache end
+    
+    -- Get character parts efficiently
     for _, obj in pairs(character:GetDescendants()) do
         if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and 
            obj.Name ~= "HumanoidRootPart" and obj.Parent then
-            table.insert(parts, obj)
+            table.insert(characterPartsCache, obj)
         end
     end
     
@@ -775,15 +840,15 @@ local function getCharacterParts()
     if arms then
         for _, obj in pairs(arms:GetDescendants()) do
             if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent then
-                table.insert(parts, obj)
+                table.insert(characterPartsCache, obj)
             end
         end
     end
     
-    return parts
+    return characterPartsCache
 end
 
--- Function to store original properties
+-- Optimized function to store original properties
 local function storeOriginalColors()
     characterEffects.originalColors = {}
     local parts = getCharacterParts()
@@ -810,6 +875,134 @@ local function storeOriginalColors()
     if head then
         local face = head:FindFirstChild("face")
         if face and face:IsA("Decal") then
+            characterEffects.originalColors[face] = {
+                Transparency = face.Transparency
+            }
+        end
+    end
+end
+
+-- Heavily optimized rainbow effect with throttling
+local function applyRainbowEffect()
+    local now = tick()
+    if now - lastRainbowUpdate < RAINBOW_UPDATE_INTERVAL then return end
+    lastRainbowUpdate = now
+    
+    if not character then return end
+    
+    local time = now * characterEffects.rainbowSpeed
+    local hue = (time % 1)
+    local color = Color3.fromHSV(hue, 1, 1)
+    
+    local parts = getCharacterParts()
+    for _, obj in pairs(parts) do
+        if obj and obj.Parent then
+            pcall(function()
+                if obj.Color ~= color then
+                    obj.Color = color
+                end
+                
+                if characterEffects.transparencyEnabled and obj.Transparency ~= characterEffects.transparencyValue then
+                    obj.Transparency = characterEffects.transparencyValue
+                    local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
+                    if surfaceApp and surfaceApp.Transparency ~= characterEffects.transparencyValue then
+                        surfaceApp.Transparency = characterEffects.transparencyValue
+                    end
+                end
+                
+                if characterEffects.materialEnabled then
+                    local targetMaterial = Enum.Material[characterEffects.selectedMaterial]
+                    if obj.Material ~= targetMaterial then
+                        obj.Material = targetMaterial
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- Optimized function to apply custom color
+local function applyCustomColor()
+    if not character then return end
+    
+    local parts = getCharacterParts()
+    for _, obj in pairs(parts) do
+        if obj and obj.Parent then
+            pcall(function()
+                if obj.Color ~= characterEffects.customColor then
+                    obj.Color = characterEffects.customColor
+                end
+                
+                if characterEffects.transparencyEnabled and obj.Transparency ~= characterEffects.transparencyValue then
+                    obj.Transparency = characterEffects.transparencyValue
+                    local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
+                    if surfaceApp and surfaceApp.Transparency ~= characterEffects.transparencyValue then
+                        surfaceApp.Transparency = characterEffects.transparencyValue
+                    end
+                end
+                
+                if characterEffects.materialEnabled then
+                    local targetMaterial = Enum.Material[characterEffects.selectedMaterial]
+                    if obj.Material ~= targetMaterial then
+                        obj.Material = targetMaterial
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- Optimized function to apply material
+local function applyMaterial()
+    if not character then return end
+    
+    local targetMaterial = Enum.Material[characterEffects.selectedMaterial]
+    local parts = getCharacterParts()
+    for _, obj in pairs(parts) do
+        if obj and obj.Parent then
+            pcall(function()
+                if obj.Material ~= targetMaterial then
+                    obj.Material = targetMaterial
+                end
+            end)
+        end
+    end
+end
+
+-- Optimized function to apply transparency
+local function applyTransparency()
+    if not character then return end
+    
+    local parts = getCharacterParts()
+    for _, obj in pairs(parts) do
+        if obj and obj.Parent then
+            pcall(function()
+                if obj.Transparency ~= characterEffects.transparencyValue then
+                    obj.Transparency = characterEffects.transparencyValue
+                end
+                
+                local surfaceApp = obj:FindFirstChildOfClass("SurfaceAppearance")
+                if surfaceApp and surfaceApp.Transparency ~= characterEffects.transparencyValue then
+                    surfaceApp.Transparency = characterEffects.transparencyValue
+                end
+            end)
+        end
+    end
+    
+    -- Handle face transparency separately with reduced value
+    local head = character:FindFirstChild("Head")
+    if head then
+        local face = head:FindFirstChild("face")
+        if face and face:IsA("Decal") then
+            pcall(function()
+                local targetTransparency = math.min(characterEffects.transparencyValue * 0.7, 0.8)
+                if face.Transparency ~= targetTransparency then
+                    face.Transparency = targetTransparency
+                end
+            end)
+        end
+    end
+endA("Decal") then
             characterEffects.originalColors[face] = {
                 Transparency = face.Transparency
             }
