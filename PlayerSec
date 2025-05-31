@@ -713,14 +713,6 @@ secplayer:AddToggle({
     end
 })
 
--- Store helper functions
-if secplayer then
-    secplayer.DisableStats = cleanupStats
-    secplayer.GetMovementMethod = function()
-        return currentMovementMethod
-    end
-end
-
 -- Character Customization Section
 local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
 seccharacter:AddSeparator({ text = "Character Effects" })
@@ -830,6 +822,39 @@ local function applyRainbowEffect()
             if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
                 local zigzagHue = zigzag(characterEffects.zigzagCounter)
                 v.Color = Color3.fromHSV(zigzagHue, 1, 1)
+                if characterEffects.transparencyEnabled then
+                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
+                    if surfaceAppearance then
+                        surfaceAppearance.Transparency = characterEffects.transparencyValue
+                    end
+                end
+            end
+        end
+        characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
+    end
+end
+
+-- Function to apply custom color
+local function applyCustomColor()
+    if not character then return end
+    
+    for _, obj in ipairs(character:GetDescendants()) do
+        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
+            obj.Color = characterEffects.customColor
+            if characterEffects.transparencyEnabled then
+                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+                if surfaceAppearance then
+                    surfaceAppearance.Transparency = characterEffects.transparencyValue
+                end
+            end
+        end
+    end
+    
+    local arms = workspace.Camera:FindFirstChild("Arms")
+    if arms then
+        for _, v in ipairs(arms:GetDescendants()) do
+            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
+                v.Color = characterEffects.customColor
                 if characterEffects.transparencyEnabled then
                     local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
                     if surfaceAppearance then
@@ -1148,7 +1173,7 @@ if character then
     updateCharacterEffects()
 end
 
--- Cleanup function
+-- Cleanup function for character effects
 local function cleanupCharacterEffects()
     if characterEffects.rainbowConnection then
         characterEffects.rainbowConnection:Disconnect()
@@ -1162,12 +1187,17 @@ local function cleanupCharacterEffects()
     characterEffects.zigzagCounter = 1
 end
 
--- Final cleanup on script end
-if cleanupStats then
-    local originalCleanup = cleanupStats
-    cleanupStats = function()
-        originalCleanup()
-        cleanupCharacterEffects()
+-- Combine cleanup functions
+local function masterCleanup()
+    cleanupStats()
+    cleanupCharacterEffects()
+end
+
+-- Store helper functions for external access
+if secplayer then
+    secplayer.DisableStats = cleanupStats
+    secplayer.GetMovementMethod = function()
+        return currentMovementMethod
     end
 end
 
@@ -1175,6 +1205,7 @@ end
 if _G.PlayerTab then
     _G.PlayerTab.CleanupStats = cleanupStats
     _G.PlayerTab.CleanupCharacterEffects = cleanupCharacterEffects
+    _G.PlayerTab.MasterCleanup = masterCleanup
     _G.PlayerTab.GetMovementMethod = function()
         return currentMovementMethod
     end
@@ -1183,8 +1214,7 @@ end
 -- Connect cleanup to player leaving or script ending
 game.Players.PlayerRemoving:Connect(function(plr)
     if plr == player then
-        cleanupStats()
-        cleanupCharacterEffects()
+        masterCleanup()
     end
 end)
 
@@ -1197,37 +1227,4 @@ end
 _G.CROW:SendNotification("Player section loaded successfully", 2)
 
 -- Mark section as loaded for external scripts
-_G.PlayerSectionLoaded = true surfaceAppearance then
-                        surfaceAppearance.Transparency = characterEffects.transparencyValue
-                    end
-                end
-            end
-        end
-        characterEffects.zigzagCounter = characterEffects.zigzagCounter + (0.01 * characterEffects.rainbowSpeed)
-    end
-end
-
--- Function to apply custom color
-local function applyCustomColor()
-    if not character then return end
-    
-    for _, obj in ipairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
-            obj.Color = characterEffects.customColor
-            if characterEffects.transparencyEnabled then
-                local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
-                if surfaceAppearance then
-                    surfaceAppearance.Transparency = characterEffects.transparencyValue
-                end
-            end
-        end
-    end
-    
-    local arms = workspace.Camera:FindFirstChild("Arms")
-    if arms then
-        for _, v in ipairs(arms:GetDescendants()) do
-            if (v:IsA("MeshPart") or v:IsA("BasePart") or v:IsA("UnionOperation")) and v.Parent then
-                v.Color = characterEffects.customColor
-                if characterEffects.transparencyEnabled then
-                    local surfaceAppearance = v:FindFirstChildOfClass("SurfaceAppearance")
-                    if
+_G.PlayerSectionLoaded = true
