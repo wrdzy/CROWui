@@ -1,3 +1,67 @@
+-- Configuration Table
+local Config = {
+    -- Movement settings
+    maxWalkSpeed = 150,
+    walkSpeedIncrement = 1,
+    jumpPowerMaxMultiplier = 3,
+    jumpHeightMaxMultiplier = 2,
+    jumpPowerIncrement = 1,
+    jumpHeightIncrement = 0.5,
+    
+    -- FOV settings
+    maxFOV = 120,
+    fovIncrement = 1,
+    
+    -- Update intervals
+    propertyUpdateInterval = 1/30, -- 30 FPS for property updates
+    partsCacheInterval = 0.5, -- Cache refresh interval
+    rainbowUpdateInterval = 1/60, -- Rainbow effect update rate
+    
+    -- Fullbright settings
+    fullbrightSettings = {
+        brightness = 2,
+        clockTime = 14,
+        fogEnd = 100000,
+        globalShadows = false,
+        ambient = Color3.fromRGB(178, 178, 178)
+    },
+    
+    -- Character customization settings
+    characterEffects = {
+        rainbowSpeedMin = 0.1,
+        rainbowSpeedMax = 5,
+        rainbowSpeedDefault = 1,
+        rainbowSpeedIncrement = 0.1,
+        transparencyMin = 0,
+        transparencyMax = 0.95,
+        transparencyDefault = 0.5,
+        transparencyIncrement = 0.05,
+        glowIntensityMin = 0.1,
+        glowIntensityMax = 3,
+        glowIntensityDefault = 1,
+        glowIntensityIncrement = 0.1,
+        outlineThicknessMin = 0.05,
+        outlineThicknessMax = 0.5,
+        outlineThicknessDefault = 0.1,
+        outlineThicknessIncrement = 0.05,
+        defaultCustomColor = Color3.fromRGB(255, 255, 255),
+        defaultGlowColor = Color3.fromRGB(255, 255, 255),
+        defaultOutlineColor = Color3.fromRGB(0, 0, 0),
+        defaultMaterial = "ForceField",
+        glowRange = 10,
+        outlineTransparency = 0.2
+    },
+    
+    -- Available materials for character customization
+    materials = {
+        "ForceField", "Neon", "Glass", "Plastic", "Wood", "Slate", "Concrete",
+        "CorrodedMetal", "DiamondPlate", "Foil", "Grass", "Ice", "Marble",
+        "Granite", "Brick", "Pebble", "Sand", "Fabric", "SmoothPlastic",
+        "Metal", "WoodPlanks", "Cobblestone", "Asphalt", "LeafyGrass",
+        "Rock", "Cardboard", "Pavement"
+    }
+}
+
 -- Player Section
 local secplayer = _G.PlayerTab:AddSection("Player", 1)
 secplayer:AddSeparator({ text = "Player" })
@@ -11,7 +75,7 @@ local TweenService = game:GetService("TweenService")
 -- Player References
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+local humanoid = character and character:WaitForChild("Humanoid", 5)
 local camera = workspace.CurrentCamera
 
 -- Validation checks
@@ -25,8 +89,13 @@ if not camera then
     return
 end
 
--- Configuration values - Each feature has independent values
-local speedValue = (humanoid and humanoid.WalkSpeed ~= 0) and humanoid.WalkSpeed or 16
+if not humanoid then
+    warn("Humanoid not found")
+    return
+end
+
+-- Configuration values - Pulled from character
+local speedValue = humanoid.WalkSpeed > 0 and humanoid.WalkSpeed or Config.maxWalkSpeed / 2
 local fovValue = camera.FieldOfView
 local originalFov = camera.FieldOfView
 
@@ -52,25 +121,25 @@ local function detectJumpProperty()
     
     if pcall(function() return humanoid.JumpPower end) then
         jumpPropertyName = "JumpPower"
-        jumpValue = humanoid.JumpPower > 0 and humanoid.JumpPower or 50
+        jumpValue = humanoid.JumpPower > 0 and humanoid.JumpPower or Config.defaultJumpPower
         originalJumpValue = jumpValue
         jumpMin = jumpValue
-        jumpMax = jumpValue * 3
-        jumpMultiplier = 1
+        jumpMax = jumpValue * Config.jumpPowerMaxMultiplier
+        jumpMultiplier = Config.jumpPowerIncrement
     elseif pcall(function() return humanoid.JumpHeight end) then
         jumpPropertyName = "JumpHeight"
-        jumpValue = humanoid.JumpHeight > 0 and humanoid.JumpHeight or 7.2
+        jumpValue = humanoid.JumpHeight > 0 and humanoid.JumpHeight or Config.defaultJumpHeight
         originalJumpValue = jumpValue
         jumpMin = jumpValue
-        jumpMax = jumpValue * 2
-        jumpMultiplier = 0.5
+        jumpMax = jumpValue * Config.jumpHeightMaxMultiplier
+        jumpMultiplier = Config.jumpHeightIncrement
     else
         jumpPropertyName = "JumpPower"
-        jumpValue = 50
-        originalJumpValue = 50
+        jumpValue = Config.defaultJumpPower
+        originalJumpValue = jumpValue
         jumpMin = jumpValue
-        jumpMax = jumpValue * 3
-        jumpMultiplier = 1
+        jumpMax = jumpValue * Config.jumpPowerMaxMultiplier
+        jumpMultiplier = Config.jumpPowerIncrement
     end
 end
 
@@ -145,12 +214,8 @@ local function setupCharacter(char)
     end
     
     -- Store original values for new character
-    if humanoid.WalkSpeed > 0 then
-        originalValues.walkSpeed = humanoid.WalkSpeed
-    else
-        humanoid.WalkSpeed = 16
-        originalValues.walkSpeed = 16
-    end
+    originalValues.walkSpeed = humanoid.WalkSpeed > 0 and humanoid.WalkSpeed or Config.maxWalkSpeed / 2
+    speedValue = originalValues.walkSpeed
     
     -- Re-detect jump property for new character
     detectJumpProperty()
@@ -376,11 +441,10 @@ end
 
 -- Optimized property enforcement with throttling
 local lastPropertyUpdate = 0
-local PROPERTY_UPDATE_INTERVAL = 1/30 -- 30 FPS for property updates
 
 local function enforceProperties()
     local now = tick()
-    if now - lastPropertyUpdate < PROPERTY_UPDATE_INTERVAL then return end
+    if now - lastPropertyUpdate < Config.propertyUpdateInterval then return end
     lastPropertyUpdate = now
     
     -- Check if character exists
@@ -414,12 +478,12 @@ local function enforceProperties()
     
     -- FullBright enforcement (reduced frequency)
     if states.fullbrightEnabled then
-        if Lighting.Brightness ~= 2 then Lighting.Brightness = 2 end
-        if Lighting.ClockTime ~= 14 then Lighting.ClockTime = 14 end
-        if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
-        if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
-        if Lighting.Ambient ~= Color3.fromRGB(178, 178, 178) then
-            Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        if Lighting.Brightness ~= Config.fullbrightSettings.brightness then Lighting.Brightness = Config.fullbrightSettings.brightness end
+        if Lighting.ClockTime ~= Config.fullbrightSettings.clockTime then Lighting.ClockTime = Config.fullbrightSettings.clockTime end
+        if Lighting.FogEnd ~= Config.fullbrightSettings.fogEnd then Lighting.FogEnd = Config.fullbrightSettings.fogEnd end
+        if Lighting.GlobalShadows ~= Config.fullbrightSettings.globalShadows then Lighting.GlobalShadows = Config.fullbrightSettings.globalShadows end
+        if Lighting.Ambient ~= Config.fullbrightSettings.ambient then
+            Lighting.Ambient = Config.fullbrightSettings.ambient
         end
     end
 end
@@ -502,11 +566,11 @@ toggleFullBright = function(state)
             clockTime = Lighting.ClockTime
         }
         
-        Lighting.Brightness = 2
-        Lighting.ClockTime = 14
-        Lighting.FogEnd = 100000
-        Lighting.GlobalShadows = false
-        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        Lighting.Brightness = Config.fullbrightSettings.brightness
+        Lighting.ClockTime = Config.fullbrightSettings.clockTime
+        Lighting.FogEnd = Config.fullbrightSettings.fogEnd
+        Lighting.GlobalShadows = Config.fullbrightSettings.globalShadows
+        Lighting.Ambient = Config.fullbrightSettings.ambient
     else
         -- Restore all original lighting values
         pcall(function() Lighting.Brightness = originalLighting.brightness end)
@@ -586,9 +650,9 @@ local speedSlider = secplayer:AddSlider({
     text = "WalkSpeed",
     tooltip = "Adjust player movement speed",
     flag = "walkspeed",
-    min = 16,
-    max = 150,
-    increment = 1,
+    min = originalValues.walkSpeed,
+    max = Config.maxWalkSpeed,
+    increment = Config.walkSpeedIncrement,
     default = speedValue,
     callback = function(v)
         speedValue = v
@@ -681,8 +745,8 @@ local fovSlider = secplayer:AddSlider({
     tooltip = "Adjust camera field of view",
     flag = "fov",
     min = originalFov,
-    max = 120,
-    increment = 1,
+    max = Config.maxFOV,
+    increment = Config.fovIncrement,
     default = fovValue,
     callback = function(v)
         fovValue = v
@@ -746,14 +810,14 @@ local CharacterCustomizer = {
     
     -- Settings
     settings = {
-        customColor = Color3.fromRGB(255, 255, 255),
-        rainbowSpeed = 1,
-        selectedMaterial = "ForceField",
-        transparencyValue = 0.5,
-        glowColor = Color3.fromRGB(255, 255, 255),
-        glowIntensity = 1,
-        outlineColor = Color3.fromRGB(0, 0, 0),
-        outlineThickness = 0.1
+        customColor = Config.characterEffects.defaultCustomColor,
+        rainbowSpeed = Config.characterEffects.rainbowSpeedDefault,
+        selectedMaterial = Config.characterEffects.defaultMaterial,
+        transparencyValue = Config.characterEffects.transparencyDefault,
+        glowColor = Config.characterEffects.defaultGlowColor,
+        glowIntensity = Config.characterEffects.glowIntensityDefault,
+        outlineColor = Config.characterEffects.defaultOutlineColor,
+        outlineThickness = Config.characterEffects.outlineThicknessDefault
     },
     
     -- Storage
@@ -768,7 +832,7 @@ local CharacterCustomizer = {
 -- Optimized part detection with caching
 function CharacterCustomizer:GetAllParts()
     local now = tick()
-    if now - self.lastCacheUpdate < 0.5 and next(self.partsCache) then
+    if now - self.lastCacheUpdate < Config.partsCacheInterval and next(self.partsCache) then
         return self.partsCache
     end
     
@@ -845,7 +909,7 @@ end
 -- Rainbow effect with throttling
 function CharacterCustomizer:UpdateRainbow()
     local now = tick()
-    if now - self.lastRainbowUpdate < 1/60 then return end
+    if now - self.lastRainbowUpdate < Config.rainbowUpdateInterval then return end
     self.lastRainbowUpdate = now
     
     if not self.state.rainbowEnabled then return end
@@ -928,7 +992,7 @@ function CharacterCustomizer:ApplyGlow()
                 light.Name = "CustomGlow"
                 light.Color = self.settings.glowColor
                 light.Brightness = self.settings.glowIntensity
-                light.Range = 10
+                light.Range = Config.characterEffects.glowRange
                 light.Parent = part
             end)
         end
@@ -951,7 +1015,7 @@ function CharacterCustomizer:ApplyOutline()
                 box.Adornee = part
                 box.Color3 = self.settings.outlineColor
                 box.LineThickness = self.settings.outlineThickness
-                box.Transparency = 0.2
+                box.Transparency = Config.characterEffects.outlineTransparency
                 box.Parent = part
             end)
         end
@@ -1254,10 +1318,10 @@ seccharacter:AddSlider({
     text = "Rainbow Speed",
     tooltip = "Adjust the speed of the rainbow effect",
     flag = "rainbowspeed",
-    min = 0.1,
-    max = 5,
-    increment = 0.1,
-    default = 1,
+    min = Config.characterEffects.rainbowSpeedMin,
+    max = Config.characterEffects.rainbowSpeedMax,
+    increment = Config.characterEffects.rainbowSpeedIncrement,
+    default = Config.characterEffects.rainbowSpeedDefault,
     callback = function(v)
         CharacterCustomizer.settings.rainbowSpeed = v
     end
@@ -1319,16 +1383,10 @@ seccharacter:AddToggle({
 seccharacter:AddList({
     text = "Material Type",
     tooltip = "Select character material",
-    selected = "ForceField",
+    selected = Config.characterEffects.defaultMaterial,
     multi = false,
     max = 10,
-    values = {
-        "ForceField", "Neon", "Glass", "Plastic", "Wood", "Slate", "Concrete",
-        "CorrodedMetal", "DiamondPlate", "Foil", "Grass", "Ice", "Marble",
-        "Granite", "Brick", "Pebble", "Sand", "Fabric", "SmoothPlastic",
-        "Metal", "WoodPlanks", "Cobblestone", "Asphalt", "LeafyGrass",
-        "Rock", "Cardboard", "Pavement"
-    },
+    values = Config.materials,
     callback = function(v)
         CharacterCustomizer.settings.selectedMaterial = v
         if CharacterCustomizer.state.materialEnabled then
@@ -1362,10 +1420,10 @@ seccharacter:AddSlider({
     text = "Transparency Level",
     tooltip = "Adjust character transparency",
     flag = "transparencylevel",
-    min = 0,
-    max = 0.95,
-    increment = 0.05,
-    default = 0.5,
+    min = Config.characterEffects.transparencyMin,
+    max = Config.characterEffects.transparencyMax,
+    increment = Config.characterEffects.transparencyIncrement,
+    default = Config.characterEffects.transparencyDefault,
     callback = function(v)
         CharacterCustomizer.settings.transparencyValue = v
         if CharacterCustomizer.state.transparencyEnabled then
@@ -1410,10 +1468,10 @@ seccharacter:AddSlider({
     text = "Glow Intensity",
     tooltip = "Adjust glow brightness",
     flag = "glowintensity",
-    min = 0.1,
-    max = 3,
-    increment = 0.1,
-    default = 1,
+    min = Config.characterEffects.glowIntensityMin,
+    max = Config.characterEffects.glowIntensityMax,
+    increment = Config.characterEffects.glowIntensityIncrement,
+    default = Config.characterEffects.glowIntensityDefault,
     callback = function(v)
         CharacterCustomizer.settings.glowIntensity = v
         if CharacterCustomizer.state.glowEnabled then
@@ -1458,10 +1516,10 @@ seccharacter:AddSlider({
     text = "Outline Thickness",
     tooltip = "Adjust outline thickness",
     flag = "outlinethickness",
-    min = 0.05,
-    max = 0.5,
-    increment = 0.05,
-    default = 0.1,
+    min = Config.characterEffects.outlineThicknessMin,
+    max = Config.characterEffects.outlineThicknessMax,
+    increment = Config.characterEffects.outlineThicknessIncrement,
+    default = Config.characterEffects.outlineThicknessDefault,
     callback = function(v)
         CharacterCustomizer.settings.outlineThickness = v
         if CharacterCustomizer.state.outlineEnabled then
