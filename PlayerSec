@@ -1171,8 +1171,33 @@ if cleanupStats then
     end
 end
 
+-- Store cleanup functions for external access
+if _G.PlayerTab then
+    _G.PlayerTab.CleanupStats = cleanupStats
+    _G.PlayerTab.CleanupCharacterEffects = cleanupCharacterEffects
+    _G.PlayerTab.GetMovementMethod = function()
+        return currentMovementMethod
+    end
+end
+
+-- Connect cleanup to player leaving or script ending
+game.Players.PlayerRemoving:Connect(function(plr)
+    if plr == player then
+        cleanupStats()
+        cleanupCharacterEffects()
+    end
+end)
+
+-- Final initialization
+if character then
+    setupCharacter(character)
+end
+
 -- Ensure player section is marked as loaded
-_G.CROW:SendNotification("Player section loaded successfully", 2) surfaceAppearance then
+_G.CROW:SendNotification("Player section loaded successfully", 2)
+
+-- Mark section as loaded for external scripts
+_G.PlayerSectionLoaded = true surfaceAppearance then
                         surfaceAppearance.Transparency = characterEffects.transparencyValue
                     end
                 end
