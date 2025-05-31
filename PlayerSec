@@ -742,16 +742,23 @@ local function storeOriginalColors()
     characterEffects.originalColors = {}
     if character then
         for _, obj in ipairs(character:GetDescendants()) do
-            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
+            -- Include Head but handle accessories/hats separately
+            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+               obj.Name ~= "HumanoidRootPart" then
+                -- Check if the part is inside an accessory
+                local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
                 characterEffects.originalColors[obj] = {
                     Color = obj.Color,
                     Material = obj.Material,
                     Transparency = obj.Transparency,
-                    SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil
+                    SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil,
+                    IsAccessory = isAccessory -- Track if it's an accessory
                 }
-            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            elseif (obj:IsA("Decal") or obj:IsA("Texture")) then
+                -- Include face decal but mark it specially
                 characterEffects.originalColors[obj] = {
-                    Transparency = obj.Transparency
+                    Transparency = obj.Transparency,
+                    IsFace = obj.Name == "face"
                 }
             end
         end
@@ -765,7 +772,8 @@ local function storeOriginalColors()
                     Color = obj.Color,
                     Material = obj.Material,
                     Transparency = obj.Transparency,
-                    SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil
+                    SurfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance") and obj:FindFirstChildOfClass("SurfaceAppearance").Transparency or nil,
+                    IsArms = true
                 }
             end
         end
@@ -776,7 +784,8 @@ end
 local function restoreOriginalColors()
     for obj, properties in pairs(characterEffects.originalColors) do
         if obj and obj.Parent then
-            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Name ~= "HumanoidRootPart" then
+            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and 
+               obj.Name ~= "HumanoidRootPart" then
                 obj.Color = properties.Color
                 if not characterEffects.materialEnabled then
                     obj.Material = properties.Material
@@ -788,7 +797,7 @@ local function restoreOriginalColors()
                         surfaceAppearance.Transparency = properties.SurfaceAppearance
                     end
                 end
-            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            elseif (obj:IsA("Decal") or obj:IsA("Texture")) then
                 if not characterEffects.transparencyEnabled then
                     obj.Transparency = properties.Transparency
                 end
@@ -805,8 +814,17 @@ local function applyRainbowEffect()
     local color = Color3.fromHSV(hue, 1, 1)
     
     for _, obj in ipairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
-            obj.Color = color
+        -- Include Head but handle accessories carefully
+        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+           obj.Name ~= "HumanoidRootPart" then
+            -- Check if it's an accessory part
+            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+            
+            -- Apply color to all parts including head, but be careful with accessories
+            if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
+                obj.Color = color
+            end
+            
             if characterEffects.transparencyEnabled then
                 local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
                 if surfaceAppearance then
@@ -839,8 +857,17 @@ local function applyCustomColor()
     if not character then return end
     
     for _, obj in ipairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
-            obj.Color = characterEffects.customColor
+        -- Include Head but handle accessories carefully
+        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+           obj.Name ~= "HumanoidRootPart" then
+            -- Check if it's an accessory part
+            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+            
+            -- Apply color to all parts including head, but be careful with accessories
+            if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
+                obj.Color = characterEffects.customColor
+            end
+            
             if characterEffects.transparencyEnabled then
                 local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
                 if surfaceAppearance then
@@ -871,8 +898,16 @@ local function applyMaterial()
     if not character then return end
     
     for _, obj in ipairs(character:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and obj.Name ~= "HumanoidRootPart" then
-            obj.Material = Enum.Material[characterEffects.selectedMaterial]
+        -- Include Head but handle accessories carefully
+        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Parent and 
+           obj.Name ~= "HumanoidRootPart" then
+            -- Check if it's an accessory part
+            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+            
+            -- Apply material to all parts including head, but be careful with accessories
+            if not isAccessory or obj.Name == "Handle" then -- Only apply to accessory handles, not other accessory parts
+                obj.Material = Enum.Material[characterEffects.selectedMaterial]
+            end
         end
     end
     
@@ -891,13 +926,35 @@ local function applyTransparency()
     if not character then return end
     
     for _, obj in ipairs(character:GetDescendants()) do
-        if ((obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Name ~= "HumanoidRootPart" or obj:IsA("Decal") or obj:IsA("Texture")) and obj.Parent then
-            obj.Transparency = characterEffects.transparencyValue
-            if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) then
+        if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) and obj.Name ~= "HumanoidRootPart" and obj.Parent then
+            -- Check if it's an accessory part
+            local isAccessory = obj.Parent and obj.Parent:IsA("Accessory")
+            
+            -- Apply transparency but handle accessories carefully (some accessories don't work well with transparency)
+            if not isAccessory then
+                -- Apply to body parts including head
+                obj.Transparency = characterEffects.transparencyValue
                 local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
                 if surfaceAppearance then
                     surfaceAppearance.Transparency = characterEffects.transparencyValue
                 end
+            else
+                -- For accessories, only apply to handle and use reduced transparency to avoid issues
+                if obj.Name == "Handle" then
+                    local reducedTransparency = math.min(characterEffects.transparencyValue * 0.7, 0.8) -- Limit accessory transparency
+                    obj.Transparency = reducedTransparency
+                    local surfaceAppearance = obj:FindFirstChildOfClass("SurfaceAppearance")
+                    if surfaceAppearance then
+                        surfaceAppearance.Transparency = reducedTransparency
+                    end
+                end
+            end
+        elseif (obj:IsA("Decal") or obj:IsA("Texture")) and obj.Parent then
+            -- Handle face separately - apply reduced transparency to face
+            if obj.Name == "face" then
+                obj.Transparency = math.min(characterEffects.transparencyValue * 0.5, 0.7) -- Reduced face transparency
+            else
+                obj.Transparency = characterEffects.transparencyValue
             end
         end
     end
