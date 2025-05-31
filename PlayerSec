@@ -1283,7 +1283,7 @@ if character then
 end
 
 -- Ensure player section is marked as loaded
-_G.CROW:SendNotification("Player section loaded successfully", 2)
+-- _G.CROW:SendNotification("Player section loaded successfully", 2)
 
 -- Mark section as loaded for external scripts
 _G.PlayerSectionLoaded = true
