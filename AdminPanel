@@ -1,10 +1,10 @@
 -- AdminPanel.lua - Comprehensive Admin Panel for CROW
 -- This file should be hosted at: https://raw.githubusercontent.com/wrdzy/CROWui/refs/heads/main/AdminPanel
 
-print("Loading Admin Panel...")
+_G.CROW:SendNotification("Loading Admin Panel...", 3)
 
 if not _G.isAdmin then
-    warn("Access denied: Not an admin")
+    _G.CROW:SendNotification("Access denied: Not an admin", 5)
     return
 end
 
@@ -22,28 +22,61 @@ _G.AdminPanel.AutoRefresh = false
 _G.AdminPanel.MonitoringPlayers = false
 
 -- UI Sections
-local MainSection = _G.AdminTab:AddSection("Admin Controls")
-local BlacklistSection = _G.AdminTab:AddSection("Blacklist Management")
-local PlayerSection = _G.AdminTab:AddSection("Player Monitoring")
-local ServerSection = _G.AdminTab:AddSection("Server Management")
+local MainSection = _G.AdminTab:AddSection("Admin Controls", 1)
+local BlacklistSection = _G.AdminTab:AddSection("Blacklist Management", 1)
+local PlayerSection = _G.AdminTab:AddSection("Player Monitoring", 2)
+local ServerSection = _G.AdminTab:AddSection("Server Management", 2)
 
 -- ===================== MAIN ADMIN CONTROLS =====================
 MainSection:AddSeparator({ text = "Admin Information" })
 
--- Using button-style info display since labels aren't available
-MainSection:AddButton("CROW Admin Panel v1.0.5", function() end)
-MainSection:AddButton("Admin ID: " .. tostring(_G.userId), function() end)
-MainSection:AddButton("Total Admins: " .. #_G.Admins, function() end)
+MainSection:AddButton({
+    enabled = true,
+    text = "CROW Admin Panel v1.0.5",
+    tooltip = "Admin panel version info",
+    callback = function() 
+        _G.CROW:SendNotification("CROW Admin Panel v1.0.5", 3)
+    end
+})
+
+MainSection:AddButton({
+    enabled = true,
+    text = "Admin ID: " .. tostring(_G.userId),
+    tooltip = "Your admin user ID",
+    callback = function() 
+        _G.CROW:SendNotification("Your Admin ID: " .. tostring(_G.userId), 3)
+    end
+})
+
+MainSection:AddButton({
+    enabled = true,
+    text = "Total Admins: " .. #_G.Admins,
+    tooltip = "Total number of admins",
+    callback = function() 
+        _G.CROW:SendNotification("Total Admins: " .. #_G.Admins, 3)
+    end
+})
+
+-- Blacklist count button
+_G.AdminPanel.BlacklistCountButton = MainSection:AddButton({
+    enabled = true,
+    text = "Blacklisted Players: Loading...",
+    tooltip = "Total blacklisted players - click to refresh",
+    callback = function() 
+        refreshBlacklistInfo()
+    end
+})
 
 MainSection:AddSeparator({ text = "Quick Actions" })
 
-MainSection:AddButton("Refresh All Data", function()
-    refreshAllData()
-end)
-
-MainSection:AddButton("Reload All Sections", function()
-    reloadAllSections()
-end)
+MainSection:AddButton({
+    enabled = true,
+    text = "Refresh All Data",
+    tooltip = "Refresh blacklist and player data",
+    callback = function()
+        refreshAllData()
+    end
+})
 
 MainSection:AddToggle({
     text = "Auto Refresh Data",
@@ -61,23 +94,47 @@ MainSection:AddToggle({
 -- ===================== BLACKLIST MANAGEMENT =====================
 BlacklistSection:AddSeparator({ text = "Blacklist Controls" })
 
-BlacklistSection:AddTextBox("Add Player to Blacklist", "Enter UserID or Username", function(input)
-    if input and input ~= "" then
-        addPlayerToBlacklist(input)
+BlacklistSection:AddBox({
+    enabled = true,
+    name = "Add Player to Blacklist",
+    flag = "AddPlayerInput",
+    input = "Enter UserID or Username",
+    focused = false,
+    risky = false,
+    callback = function(input)
+        if input and input ~= "" then
+            addPlayerToBlacklist(input)
+        end
     end
-end)
+})
 
-BlacklistSection:AddTextBox("Remove Player from Blacklist", "Enter UserID", function(input)
-    if input and input ~= "" then
-        removePlayerFromBlacklist(input)
+BlacklistSection:AddBox({
+    enabled = true,
+    name = "Remove Player from Blacklist",
+    flag = "RemovePlayerInput", 
+    input = "Enter UserID",
+    focused = false,
+    risky = false,
+    callback = function(input)
+        if input and input ~= "" then
+            removePlayerFromBlacklist(input)
+        end
     end
-end)
+})
 
 BlacklistSection:AddSeparator({ text = "Search & Display" })
 
-BlacklistSection:AddTextBox("Search Blacklist", "Search by name, display name, or ID", function(input)
-    searchBlacklist(input)
-end)
+BlacklistSection:AddBox({
+    enabled = true,
+    name = "Search Blacklist",
+    flag = "SearchBlacklistInput",
+    input = "Search by name, display name, or ID",
+    focused = false,
+    risky = false,
+    callback = function(input)
+        searchBlacklist(input)
+    end
+})
 
 BlacklistSection:AddToggle({
     text = "Show Detailed Info",
@@ -90,41 +147,63 @@ BlacklistSection:AddToggle({
 })
 
 BlacklistSection:AddSlider({
+    enabled = true,
     text = "Max Display Results",
+    tooltip = "Maximum players to show in list",
+    flag = "MaxDisplayResults",
+    suffix = " players",
     min = 5,
     max = 50,
     increment = 5,
-    default = 15,
-    flag = "MaxDisplayResults",
-    tooltip = "Maximum players to show in list",
+    risky = false,
     callback = function(value)
         updateBlacklistDisplay()
     end
 })
 
--- Blacklist Display Button (will update text)
-_G.AdminPanel.BlacklistDisplay = BlacklistSection:AddButton("Loading blacklisted players...", function()
-    refreshBlacklistInfo()
-end)
+-- Blacklist Display Button
+_G.AdminPanel.BlacklistDisplay = BlacklistSection:AddButton({
+    enabled = true,
+    text = "Loading blacklisted players...",
+    tooltip = "Click to refresh blacklist display",
+    callback = function()
+        refreshBlacklistInfo()
+    end
+})
 
 BlacklistSection:AddSeparator({ text = "Blacklist Actions" })
 
-BlacklistSection:AddButton("Export Blacklist", function()
-    exportBlacklist()
-end)
+BlacklistSection:AddButton({
+    enabled = true,
+    text = "Export Blacklist",
+    tooltip = "Export blacklist data",
+    callback = function()
+        exportBlacklist()
+    end
+})
 
-BlacklistSection:AddButton("Clear Search", function()
-    library.flags["SearchBlacklistInput"] = ""
-    updateBlacklistDisplay()
-end)
+BlacklistSection:AddButton({
+    enabled = true,
+    text = "Clear Search",
+    tooltip = "Clear search filter",
+    callback = function()
+        library.flags["SearchBlacklistInput"] = ""
+        updateBlacklistDisplay()
+    end
+})
 
 -- ===================== PLAYER MONITORING ===================== 
 PlayerSection:AddSeparator({ text = "Current Players" })
 
 -- Player count display
-_G.AdminPanel.PlayerCountButton = PlayerSection:AddButton("Players in server: " .. #Players:GetPlayers(), function()
-    updatePlayerList()
-end)
+_G.AdminPanel.PlayerCountButton = PlayerSection:AddButton({
+    enabled = true,
+    text = "Players in server: " .. #Players:GetPlayers(),
+    tooltip = "Click to refresh player list",
+    callback = function()
+        updatePlayerList()
+    end
+})
 
 PlayerSection:AddToggle({
     text = "Monitor Player Activity",
@@ -140,46 +219,78 @@ PlayerSection:AddToggle({
 })
 
 PlayerSection:AddList({
+    enabled = true,
     text = "Player Info Display",
+    tooltip = "Choose how much player info to show",
     selected = "Basic",
+    multi = false,
+    open = false,
+    max = 4,
     values = {"Basic", "Detailed", "Advanced"},
     flag = "PlayerInfoLevel",
-    tooltip = "Choose how much player info to show"
+    risky = false,
+    callback = function(value)
+        updatePlayerList()
+    end
 })
 
 -- Player list display button
-_G.AdminPanel.PlayerListDisplay = PlayerSection:AddButton("Enable monitoring to see player list", function()
-    if _G.AdminPanel.MonitoringPlayers then
-        updatePlayerList()
-    else
-        _G.CROW:SendNotification("Enable player monitoring first", 2)
+_G.AdminPanel.PlayerListDisplay = PlayerSection:AddButton({
+    enabled = true,
+    text = "Enable monitoring to see player list",
+    tooltip = "Shows current players in server",
+    callback = function()
+        if _G.AdminPanel.MonitoringPlayers then
+            updatePlayerList()
+        else
+            _G.CROW:SendNotification("Enable player monitoring first", 2)
+        end
     end
-end)
+})
 
 PlayerSection:AddSeparator({ text = "Player Actions" })
 
-PlayerSection:AddTextBox("Kick Player", "Enter username or UserID", function(input)
-    if input and input ~= "" then
-        kickPlayer(input)
+PlayerSection:AddBox({
+    enabled = true,
+    name = "Kick Player",
+    flag = "KickPlayerInput",
+    input = "Enter username or UserID",
+    focused = false,
+    risky = true,
+    callback = function(input)
+        if input and input ~= "" then
+            kickPlayer(input)
+        end
     end
-end)
+})
 
-PlayerSection:AddTextBox("Get Player Info", "Enter username or UserID", function(input)
-    if input and input ~= "" then
-        getDetailedPlayerInfo(input)
+PlayerSection:AddBox({
+    enabled = true,
+    name = "Get Player Info",
+    flag = "PlayerInfoInput",
+    input = "Enter username or UserID",
+    focused = false,
+    risky = false,
+    callback = function(input)
+        if input and input ~= "" then
+            getDetailedPlayerInfo(input)
+        end
     end
-end)
+})
 
 -- ===================== SERVER MANAGEMENT =====================
 ServerSection:AddSeparator({ text = "Server Controls" })
 
-ServerSection:AddButton("Kick All Non-Admins", function()
-    kickAllNonAdmins()
-end)
-
-ServerSection:AddButton("Announce to Server", function()
-    announceToServer()
-end)
+ServerSection:AddButton({
+    enabled = true,
+    text = "Kick All Non-Admins",
+    tooltip = "Kick all players except admins",
+    confirm = true,
+    risky = true,
+    callback = function()
+        kickAllNonAdmins()
+    end
+})
 
 ServerSection:AddToggle({
     text = "Auto-Kick Blacklisted",
@@ -192,15 +303,49 @@ ServerSection:AddSeparator({ text = "Server Information" })
 
 -- Game info using buttons
 local gameInfo = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-ServerSection:AddButton("Game: " .. (gameInfo.Name or "Unknown"), function() end)
-ServerSection:AddButton("Place ID: " .. tostring(game.PlaceId), function() end)
-ServerSection:AddButton("Job ID: " .. tostring(game.JobId):sub(1, 8) .. "...", function() end)
+ServerSection:AddButton({
+    enabled = true,
+    text = "Game: " .. (gameInfo.Name or "Unknown"),
+    tooltip = "Current game name",
+    callback = function() 
+        _G.CROW:SendNotification("Game: " .. (gameInfo.Name or "Unknown"), 3)
+    end
+})
+
+ServerSection:AddButton({
+    enabled = true,
+    text = "Place ID: " .. tostring(game.PlaceId),
+    tooltip = "Current place ID",
+    callback = function() 
+        _G.CROW:SendNotification("Place ID: " .. tostring(game.PlaceId), 3)
+    end
+})
+
+ServerSection:AddButton({
+    enabled = true,
+    text = "Job ID: " .. tostring(game.JobId):sub(1, 8) .. "...",
+    tooltip = "Current server job ID",
+    callback = function() 
+        _G.CROW:SendNotification("Job ID: " .. tostring(game.JobId), 5)
+    end
+})
 
 ServerSection:AddSeparator({ text = "Performance" })
 
 -- Performance monitoring buttons
-_G.AdminPanel.FPSButton = ServerSection:AddButton("FPS: Calculating...", function() end)
-_G.AdminPanel.PingButton = ServerSection:AddButton("Ping: Calculating...", function() end)
+_G.AdminPanel.FPSButton = ServerSection:AddButton({
+    enabled = true,
+    text = "FPS: Calculating...",
+    tooltip = "Current frames per second",
+    callback = function() end
+})
+
+_G.AdminPanel.PingButton = ServerSection:AddButton({
+    enabled = true,
+    text = "Ping: Calculating...",
+    tooltip = "Current network ping",
+    callback = function() end
+})
 
 -- ===================== FUNCTIONS =====================
 
@@ -268,6 +413,12 @@ function refreshBlacklistInfo()
         
         updateBlacklistDisplay()
         _G.AdminPanel.RefreshInProgress = false
+        
+        -- Update blacklist count button
+        if _G.AdminPanel.BlacklistCountButton then
+            _G.AdminPanel.BlacklistCountButton:SetText("Blacklisted Players: " .. #_G.BlacklistedPlayers)
+        end
+        
         _G.CROW:SendNotification("Blacklist refreshed! (" .. #_G.BlacklistedPlayers .. " players)", 3)
     end)
 end
@@ -280,7 +431,7 @@ function updateBlacklistDisplay()
     local showDetailed = library.flags["ShowDetailedBlacklistInfo"]
     local searchQuery = library.flags["SearchBlacklistInput"] or ""
     
-    local displayText = "=== BLACKLISTED PLAYERS (" .. #_G.BlacklistedPlayers .. ") ===\n"
+    local displayText = "=== BLACKLISTED PLAYERS (" .. #_G.BlacklistedPlayers .. ") ==="
     
     local playersToShow = _G.AdminPanel.BlacklistCache
     
@@ -300,22 +451,23 @@ function updateBlacklistDisplay()
         end
         
         playersToShow = filteredPlayers
-        displayText = "=== SEARCH: '" .. searchQuery .. "' (" .. #filteredPlayers .. " results) ===\n"
+        displayText = "=== SEARCH: '" .. searchQuery .. "' (" .. #filteredPlayers .. " results) ==="
     end
     
     if #playersToShow == 0 then
-        displayText = displayText .. "No players found."
+        displayText = displayText .. "\nNo players found."
     else
+        local count = 0
         for i, player in ipairs(playersToShow) do
-            if i > maxResults then
-                displayText = displayText .. "... and " .. (#playersToShow - maxResults) .. " more players"
+            if count >= maxResults then
+                displayText = displayText .. "\n... and " .. (#playersToShow - maxResults) .. " more players"
                 break
             end
             
+            count = count + 1
             if showDetailed then
                 displayText = displayText .. string.format(
-                    "[%d] %s (@%s) | ID: %s\n" ..
-                    "    Status: %s%s | Created: %s\n",
+                    "\n[%d] %s (@%s) | ID: %s | Status: %s%s | Created: %s",
                     i,
                     player.displayName,
                     player.name,
@@ -326,7 +478,7 @@ function updateBlacklistDisplay()
                 )
             else
                 displayText = displayText .. string.format(
-                    "[%d] %s (@%s) | %s\n",
+                    "\n[%d] %s (@%s) | %s",
                     i,
                     player.displayName,
                     player.name,
@@ -439,7 +591,7 @@ function updatePlayerList()
     local currentPlayers = Players:GetPlayers()
     local playerInfo = library.flags["PlayerInfoLevel"] or "Basic"
     
-    local displayText = "=== CURRENT PLAYERS (" .. #currentPlayers .. ") ===\n"
+    local displayText = "=== CURRENT PLAYERS (" .. #currentPlayers .. ") ==="
     
     for i, player in ipairs(currentPlayers) do
         local isAdmin = false
@@ -460,7 +612,7 @@ function updatePlayerList()
         
         if playerInfo == "Basic" then
             displayText = displayText .. string.format(
-                "[%d] %s%s%s\n",
+                "\n[%d] %s%s%s",
                 i,
                 player.Name,
                 isAdmin and " [ADMIN]" or "",
@@ -468,7 +620,7 @@ function updatePlayerList()
             )
         elseif playerInfo == "Detailed" then
             displayText = displayText .. string.format(
-                "[%d] %s (@%s) | ID: %s%s%s\n",
+                "\n[%d] %s (@%s) | ID: %s%s%s",
                 i,
                 player.DisplayName or player.Name,
                 player.Name,
@@ -494,8 +646,7 @@ function updatePlayerList()
             end
             
             displayText = displayText .. string.format(
-                "[%d] %s (@%s)\n" ..
-                "    ID: %s | HP: %s | Tool: %s%s%s\n",
+                "\n[%d] %s (@%s) | ID: %s | HP: %s | Tool: %s%s%s",
                 i,
                 player.DisplayName or player.Name,
                 player.Name,
@@ -568,12 +719,7 @@ function getDetailedPlayerInfo(input)
     
     if targetPlayer then
         local info = string.format(
-            "=== PLAYER INFO ===\n" ..
-            "Name: %s\n" ..
-            "Display: %s\n" ..
-            "UserID: %s\n" ..
-            "Account Age: %d days\n" ..
-            "Team: %s\n",
+            "=== PLAYER INFO === Name: %s | Display: %s | UserID: %s | Account Age: %d days | Team: %s",
             targetPlayer.Name,
             targetPlayer.DisplayName or targetPlayer.Name,
             tostring(targetPlayer.UserId),
@@ -581,8 +727,8 @@ function getDetailedPlayerInfo(input)
             targetPlayer.Team and targetPlayer.Team.Name or "None"
         )
         
-        _G.CROW:SendNotification("Player info retrieved", 2)
-        print(info) -- Output to console
+        _G.CROW:SendNotification("Player info retrieved for " .. targetPlayer.Name, 2)
+        _G.CROW:SendNotification(info, 10) -- Longer duration for detailed info
     else
         _G.CROW:SendNotification("Player not found: " .. input, 3)
     end
@@ -611,18 +757,12 @@ function kickAllNonAdmins()
     updatePlayerList()
 end
 
--- Function to announce to server
-function announceToServer()
-    -- This would need a custom announcement system or chat
-    _G.CROW:SendNotification("Announcement feature not implemented", 3)
-end
-
 -- Function to export blacklist
 function exportBlacklist()
-    local exportData = "Blacklisted Players Export:\n"
+    local exportData = "Blacklisted Players Export: "
     for i, player in ipairs(_G.AdminPanel.BlacklistCache) do
         exportData = exportData .. string.format(
-            "%d. %s (@%s) - ID: %s\n",
+            "%d. %s (@%s) - ID: %s | ",
             i,
             player.displayName,
             player.name,
@@ -630,39 +770,8 @@ function exportBlacklist()
         )
     end
     
-    print(exportData) -- Output to console
-    _G.CROW:SendNotification("Blacklist exported to console", 3)
-end
-
--- Function to reload all sections
-function reloadAllSections()
-    _G.CROW:SendNotification("Reloading all sections...", 3)
-    
-    -- Reset section status (if available)
-    if sectionsLoaded then
-        for sectionName, _ in pairs(sectionsLoaded) do
-            if sectionName ~= "Admin" then
-                sectionsLoaded[sectionName] = false
-            end
-        end
-    end
-    
-    -- Trigger reload
-    task.spawn(function()
-        if loadSection then
-            loadSection("Player", {
-                "https://raw.githubusercontent.com/wrdzy/CROWui/refs/heads/main/PlayerSec"
-            })
-            
-            loadSection("Aimlock", {
-                "https://raw.githubusercontent.com/wrdzy/CROWui/refs/heads/main/AimSec"
-            })
-            
-            loadSection("ESP", {
-                "https://raw.githubusercontent.com/wrdzy/CROWui/refs/heads/main/ESPsec"
-            })
-        end
-    end)
+    _G.CROW:SendNotification(exportData, 10) -- Show export data in notification
+    _G.CROW:SendNotification("Blacklist exported", 3)
 end
 
 -- Function to start auto refresh
@@ -753,8 +862,7 @@ _G.AdminPanel.Cleanup = function()
     _G.AdminPanel.RefreshInProgress = false
     _G.AdminPanel.AutoRefresh = false
     _G.AdminPanel.MonitoringPlayers = false
-    print("Admin Panel cleaned up")
+    _G.CROW:SendNotification("Admin Panel cleaned up", 2)
 end
 
-print("Admin Panel loaded successfully!")
-_G.CROW:SendNotification("Admin Panel loaded ✓", 2)
+_G.CROW:SendNotification("Admin Panel loaded successfully!", 3)
