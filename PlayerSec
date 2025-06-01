@@ -157,7 +157,7 @@ local states = {
     speedEnabled = false,
     jumpEnabled = false,
     fovEnabled = false,
-    noclipEnabled = false,
+    --noclipEnabled = false,
     fullbrightEnabled = false
 }
 
@@ -196,7 +196,7 @@ local function cleanupConnections(connectionType)
 end
 
 -- Forward declarations for toggle functions
-local toggleSpeed, toggleJump, toggleFOV, toggleFullBright, toggleNoclip
+local toggleSpeed, toggleJump, toggleFOV, toggleFullBright--, toggleNoclip
 
 -- Character Setup (called when character spawns or respawns)
 local function setupCharacter(char)
@@ -226,7 +226,7 @@ local function setupCharacter(char)
         task.wait(0.5)
         if states.speedEnabled then toggleSpeed(true) end
         if states.jumpEnabled then toggleJump(true) end
-        if states.noclipEnabled then toggleNoclip(true) end
+        --if states.noclipEnabled then toggleNoclip(true) end
     end)
 end
 
@@ -398,46 +398,46 @@ local function watchFOV()
     end), "fov_watcher")
 end
 
-local function enableNoclip()
-    if not character then return end
+-- local function enableNoclip()
+--     if not character then return end
     
-    cleanupConnections("noclip")
+--     cleanupConnections("noclip")
     
-    local connection = RunService.Stepped:Connect(function()
-        if not character or not character.Parent then return end
+--     local connection = RunService.Stepped:Connect(function()
+--         if not character or not character.Parent then return end
         
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") and part ~= character:FindFirstChild("HumanoidRootPart") then
-                part.CanCollide = false
-            end
-        end
-    end)
+--         for _, part in pairs(character:GetDescendants()) do
+--             if part:IsA("BasePart") and part ~= character:FindFirstChild("HumanoidRootPart") then
+--                 part.CanCollide = false
+--             end
+--         end
+--     end)
     
-    trackConnection(connection, "noclip")
+--     trackConnection(connection, "noclip")
     
-    -- Also handle accessories and tools
-    local descendantConnection = character.DescendantAdded:Connect(function(descendant)
-        if states.noclipEnabled and descendant:IsA("BasePart") and descendant ~= character:FindFirstChild("HumanoidRootPart") then
-            descendant.CanCollide = false
-        end
-    end)
+--     -- Also handle accessories and tools
+--     local descendantConnection = character.DescendantAdded:Connect(function(descendant)
+--         if states.noclipEnabled and descendant:IsA("BasePart") and descendant ~= character:FindFirstChild("HumanoidRootPart") then
+--             descendant.CanCollide = false
+--         end
+--     end)
     
-    trackConnection(descendantConnection, "noclip")
-end
+--     trackConnection(descendantConnection, "noclip")
+-- end
 
-local function disableNoclip()
-    if not character then return end
+-- local function disableNoclip()
+--     if not character then return end
     
-    -- Remove noclip connections
-    cleanupConnections("noclip")
+--     -- Remove noclip connections
+--     cleanupConnections("noclip")
     
-    -- Restore collision
-    for _, part in pairs(character:GetDescendants()) do
-        if part:IsA("BasePart") and part ~= character:FindFirstChild("HumanoidRootPart") then
-            part.CanCollide = true
-        end
-    end
-end
+--     -- Restore collision
+--     for _, part in pairs(character:GetDescendants()) do
+--         if part:IsA("BasePart") and part ~= character:FindFirstChild("HumanoidRootPart") then
+--             part.CanCollide = true
+--         end
+--     end
+-- end
 
 -- Optimized property enforcement with throttling
 local lastPropertyUpdate = 0
@@ -538,15 +538,15 @@ toggleFOV = function(state)
     end
 end
 
-toggleNoclip = function(state)
-    states.noclipEnabled = state
+-- toggleNoclip = function(state)
+--     states.noclipEnabled = state
     
-    if state then
-        enableNoclip()
-    else
-        disableNoclip()
-    end
-end
+--     if state then
+--         enableNoclip()
+--     else
+--         disableNoclip()
+--     end
+-- end
 
 toggleFullBright = function(state)
     states.fullbrightEnabled = state
@@ -625,9 +625,9 @@ local function cleanupStats()
         toggleFullBright(false)
     end
     
-    if states.noclipEnabled then
-        disableNoclip()
-    end
+    -- if states.noclipEnabled then
+    --     disableNoclip()
+    -- end
     
     for key, _ in pairs(states) do
         states[key] = false
@@ -718,25 +718,25 @@ secplayer:AddToggle({
     end
 })
 
-secplayer:AddSeparator({ text = "" })
+-- secplayer:AddSeparator({ text = "" })
 
-secplayer:AddToggle({
-    text = "Noclip",
-    state = false,
-    tooltip = "Toggle noclip mode",
-    flag = "Toggle_Noclip",
-    callback = function(state)
-        toggleNoclip(state)
-    end
-}):AddBind({
-    text = "Noclip Key",
-    tooltip = "Hotkey to toggle noclip mode",
-    mode = "toggle",
-    bind = "None",
-    callback = function(v)
-        toggleNoclip(v)
-    end
-})
+-- secplayer:AddToggle({
+--     text = "Noclip",
+--     state = false,
+--     tooltip = "Toggle noclip mode",
+--     flag = "Toggle_Noclip",
+--     callback = function(state)
+--         toggleNoclip(state)
+--     end
+-- }):AddBind({
+--     text = "Noclip Key",
+--     tooltip = "Hotkey to toggle noclip mode",
+--     mode = "toggle",
+--     bind = "None",
+--     callback = function(v)
+--         toggleNoclip(v)
+--     end
+-- })
 
 secplayer:AddSeparator({ text = "Misc" })
 
