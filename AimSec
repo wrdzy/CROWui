@@ -1,4 +1,3 @@
---==========AIMLOCK SECTION==========
 -- Core Services
 local Players            = game:GetService("Players")
 local RunService         = game:GetService("RunService")
@@ -52,13 +51,21 @@ TargetIndicator.Color     = Color3.new(0, 0, 255)
 TargetIndicator.Transparency = 1 - 0.5
 TargetIndicator.Visible  = false
 
+local SilentTargetIndicator = Drawing.new("Circle")
+SilentTargetIndicator.Thickness = 2
+SilentTargetIndicator.NumSides = 4
+SilentTargetIndicator.Radius = 5
+SilentTargetIndicator.Color = Color3.new(255, 0, 0)
+SilentTargetIndicator.Transparency = 0.5
+SilentTargetIndicator.Visible = false
+
 -- State Variables
 local CurrentTarget      = nil
 local CurrentTargetPart  = nil
 local AimlockConnection  = nil
 local MouseMoveConnection= nil
 local LastShotTime       = 0
-local AutoShootCooldown  = 0.02
+local AutoShootCooldown  = 0.01
 
 local STICKY_RANGE       = 15
 local FOV_OFFSET_Y       = 57
@@ -299,6 +306,7 @@ local function StartAimlock()
         local partsList       = library.flags["TargetParts"] or {"Head"}
         local fovSize         = library.flags["FOVSize"] or 100
         local autoShoot       = library.flags["AutoShoot"] or false
+        local shootCooldown   = library.flags["AutoShootCooldown"] or 0.02
 
         FOVCircle.Radius  = fovSize
         FOVCircle.Visible = true
@@ -377,7 +385,7 @@ local function StartAimlock()
                 TargetIndicator.Position = Vector2.new(sp2.X, sp2.Y + INDICATOR_OFFSET_Y)
                 TargetIndicator.Visible = true
                 
-                if autoShoot and tick() - LastShotTime >= AutoShootCooldown then
+                if autoShoot and tick() - LastShotTime >= shootCooldown then
                     mouse1press()
                     wait()
                     mouse1release()
@@ -408,7 +416,7 @@ local secaim = _G.Aimlock:AddSection("Aim Lock", 1)
 secaim:AddSeparator({ text = "Main" })
 
 local aimlockToggle = secaim:AddToggle({
-    text    = "Key Aim Lock",
+    text    = "Aim Lock",
     state   = false,
     flag    = "AimlockEnabled",
     tooltip = "Toggle the aim lock",
@@ -493,7 +501,7 @@ secaim:AddList({
     callback = function() CurrentTarget, CurrentTargetPart = nil, nil end
 })
 
-secaim:AddSeparator({ text = "Misc" })
+secaim:AddSeparator({ text = "Settings" })
 
 secaim:AddSlider({
     text      = "Mouse Smoothness",
@@ -520,6 +528,18 @@ secaim:AddSlider({
     end
 })
 
+-- Added Auto Shoot Cooldown slider for Aim Lock
+secaim:AddSlider({
+    text      = "Auto Shoot Cooldown",
+    min       = 0.01,
+    max       = 1.0,
+    increment = 0.01,
+    default   = 0.02,
+    suffix    = "s",
+    flag      = "AutoShootCooldown",
+    tooltip   = "Time between auto shots"
+})
+
 secaim:AddSeparator({ text = "Prediction" })
 
 secaim:AddList({
@@ -540,7 +560,7 @@ secaim:AddSlider({
     tooltip   = "Manual prediction strength"
 })
 
-local secedit = _G.Aimlock:AddSection("Aim Lock Customize", 1)
+local secedit = _G.Aimlock:AddSection("Aim Lock Visuals", 1)
 
 secedit:AddSeparator({ text = "Colors" })
 secedit:AddColor({
@@ -587,7 +607,7 @@ local create = coroutine.create
 -- Performance optimization: Cache mouse position
 local CachedMousePosition = Vector2.new(0, 0)
 local LastMouseUpdate = 0
-local MOUSE_UPDATE_INTERVAL = 0.001 -- ~60 FPS
+local MOUSE_UPDATE_INTERVAL = 0.0001 -- ~60 FPS
 
 -- Performance optimization: Cache closest player
 local CachedClosestPlayer = nil
@@ -604,14 +624,6 @@ fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 1
 fov_circle.Color = Color3.fromRGB(0, 0, 255)
-
-local SilentTargetIndicator = Drawing.new("Circle")
-SilentTargetIndicator.Thickness = 2
-SilentTargetIndicator.NumSides = 4
-SilentTargetIndicator.Radius = 5
-SilentTargetIndicator.Color = Color3.new(0, 0, 255)
-SilentTargetIndicator.Transparency = 0.5
-SilentTargetIndicator.Visible = false
 
 -- Expected Arguments for hooking - EXPANDED TO INCLUDE MORE METHODS
 local ExpectedArguments = {
@@ -648,7 +660,6 @@ local TARGET_PARTS = {
     Legs = {"Left Leg", "LeftUpperLeg"}
 }
 
--- Utility Functions
 -- Utility Functions
 function CalculateChance(Percentage)
     Percentage = math.floor(Percentage)
@@ -747,6 +758,17 @@ local function getTargetPart(Character)
     end
 end
 
+-- Apply silent aim prediction (simplified - removed auto prediction)
+local function applySilentPrediction(part)
+    local mode = library.flags["SilentPredictionMode"] or "Off"
+    if mode == "Off" then return part.Position end
+    local vel = part.Velocity
+    if mode == "Manual" then
+        return part.Position + vel * (library.flags["SilentManualPrediction"] or 0)
+    end
+    return part.Position
+end
+
 -- Optimized closest player function with caching
 local function getClosestPlayer()
     local currentTime = tick()
@@ -768,17 +790,22 @@ local function getClosestPlayer()
         if not Character then continue end
         
         if library.flags["SilentVisibleCheck"] and not IsPlayerVisible(Player) then continue end
+        if library.flags["SilentForceFieldCheck"] and Character:FindFirstChildWhichIsA("ForceField") then continue end
 
         local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
         local Humanoid = FindFirstChild(Character, "Humanoid")
         if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
 
-        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        local targetPart = getTargetPart(Character)
+        if not targetPart then continue end
+
+        local targetPos = applySilentPrediction(targetPart)
+        local ScreenPosition, OnScreen = getPositionOnScreen(targetPos)
         if not OnScreen then continue end
 
         local Distance = (mousePos - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or library.flags["SilentFOVSize"] or 50) then
-            Closest = getTargetPart(Character)
+            Closest = targetPart
             DistanceToMouse = Distance
         end
     end
@@ -795,20 +822,17 @@ local function updateFOVVisibility()
     fov_circle.Visible = library.flags["SilentAimEnabled"]
 end
 
--- UI Creation - Add to existing Aimlock tab
+-- ===================== SILENT AIM UI SECTION =====================
 local SilentAimSection = _G.Aimlock:AddSection("Silent Aim", 2)
 
 SilentAimSection:AddSeparator({ text = "Main" })
 
 SilentAimSection:AddToggle({
-    text = "Enabled",
+    text = "Silent Aim",
     state = false,
     flag = "SilentAimEnabled",
     callback = function(state)
         updateFOVVisibility()
-        if library.flags["SilentShowIndicator"] then
-            SilentTargetIndicator.Visible = state
-        end
         -- Clear cache when toggling
         CachedClosestPlayer = nil
     end
@@ -819,12 +843,16 @@ SilentAimSection:AddToggle({
     flag = "SilentAimToggleKey",
     callback = function(state)
         updateFOVVisibility()
-        if library.flags["SilentShowIndicator"] then
-            SilentTargetIndicator.Visible = state
-        end
         -- Clear cache when toggling
         CachedClosestPlayer = nil
     end
+})
+
+SilentAimSection:AddToggle({
+    text = "Auto Shoot",
+    state = false,
+    flag = "SilentAutoShoot",
+    tooltip = "Automatically shoot when targeting with silent aim"
 })
 
 SilentAimSection:AddToggle({
@@ -837,7 +865,7 @@ SilentAimSection:AddToggle({
 })
 
 SilentAimSection:AddToggle({
-    text = "Visible Check",
+    text = "Wall Check",
     state = false,
     flag = "SilentVisibleCheck",
     callback = function()
@@ -845,9 +873,17 @@ SilentAimSection:AddToggle({
     end
 })
 
--- FIXED: Added proper line break and simplified target selection
+SilentAimSection:AddToggle({
+    text = "ForceField Check",
+    state = false,
+    flag = "SilentForceFieldCheck",
+    callback = function()
+        CachedClosestPlayer = nil
+    end
+})
+
 SilentAimSection:AddList({
-    text = "Target Parts",
+    text = "Target Body Parts",
     selected = "Head",
     multi = true,
     values = {"Head", "Torso", "Legs"},
@@ -857,39 +893,41 @@ SilentAimSection:AddList({
     end
 })
 
--- UPDATED: All available methods
+-- UPDATED: All available methods with more options
 SilentAimSection:AddList({
     text = "Silent Aim Method",
     selected = "Raycast",
     values = {
         "Raycast",
         "FindPartOnRayWithIgnoreList",
-        "FindPartOnRayWithWhitelist",
+        "FindPartOnRayWithWhitelist", 
         "FindPartOnRay",
+        "Mouse.Hit",
+        "Mouse.Target",
+        "Mouse.UnitRay",
+        "GetMouseLocation",
+        "Camera.CFrame",
         "All Methods"
     },
     flag = "SilentMethod"
 })
+
+SilentAimSection:AddSeparator({ text = "Settings" })
 
 SilentAimSection:AddSlider({
     text = "Hit Chance",
     min = 1,
     max = 100,
     increment = 1,
-    default = 1,
+    default = 100,
     suffix = "%",
     flag = "SilentHitChance"
 })
 
--- Customize Section for Silent Aim
-local SilentCustomizeSection = _G.Aimlock:AddSection("Silent Aim Customize", 2)
-
-SilentCustomizeSection:AddSeparator({ text = "Field Of View" })
-
-SilentCustomizeSection:AddSlider({
+SilentAimSection:AddSlider({
     text = "FOV Size",
     min = 50,
-    max = 360,
+    max = 500,
     increment = 1,
     default = 50,
     suffix = "px",
@@ -900,7 +938,40 @@ SilentCustomizeSection:AddSlider({
     end
 })
 
-SilentCustomizeSection:AddColor({
+SilentAimSection:AddSlider({
+    text = "Auto Shoot Cooldown",
+    min = 0.01,
+    max = 1.0,
+    increment = 0.01,
+    default = 0.05,
+    suffix = "s",
+    flag = "SilentAutoShootCooldown"
+})
+
+SilentAimSection:AddSeparator({ text = "Prediction" })
+
+SilentAimSection:AddList({
+    text = "Prediction Mode",
+    selected = "Off",
+    values = {"Off", "Manual"},
+    flag = "SilentPredictionMode"
+})
+
+SilentAimSection:AddSlider({
+    text = "Manual Prediction",
+    min = 0.01,
+    max = 0.5,
+    increment = 0.01,
+    default = 0.1,
+    flag = "SilentManualPrediction"
+})
+
+-- Silent Aim Visuals Section
+local SilentVisualsSection = _G.Aimlock:AddSection("Silent Aim Visuals", 2)
+
+SilentVisualsSection:AddSeparator({ text = "FOV Circle" })
+
+SilentVisualsSection:AddColor({
     text = "FOV Circle Color",
     color = Color3.fromRGB(255, 0, 0),
     trans = 0,
@@ -911,19 +982,10 @@ SilentCustomizeSection:AddColor({
     end
 })
 
-SilentCustomizeSection:AddSeparator({ text = "Target Indicator" })
+SilentVisualsSection:AddSeparator({ text = "Target Indicators" })
 
-SilentCustomizeSection:AddToggle({
-    text = "Show Target Indicator",
-    state = false,
-    flag = "SilentShowIndicator",
-    callback = function(state)
-        SilentTargetIndicator.Visible = state and library.flags["SilentAimEnabled"]
-    end
-})
-
-SilentCustomizeSection:AddColor({
-    text = "Indicator Color",
+SilentVisualsSection:AddColor({
+    text = "Target Indicator Color",
     color = Color3.new(255, 0, 0),
     trans = 0.5,
     flag = "SilentIndicatorColor",
@@ -932,6 +994,9 @@ SilentCustomizeSection:AddColor({
         SilentTargetIndicator.Transparency = 1 - trans
     end
 })
+
+-- Auto Shoot Variables
+local LastSilentShotTime = 0
 
 -- Optimized Render Loop with reduced frequency
 local lastRenderTime = 0
@@ -947,7 +1012,7 @@ resume(create(function()
         end
         lastRenderTime = currentTime
         
-        if library.flags["SilentShowIndicator"] and library.flags["SilentAimEnabled"] then
+        if library.flags["SilentAimEnabled"] then
             local target = getClosestPlayer()
             if target then 
                 local Root = target.Parent.PrimaryPart or target
@@ -955,6 +1020,17 @@ resume(create(function()
                 
                 SilentTargetIndicator.Visible = IsOnScreen
                 SilentTargetIndicator.Position = Vector2.new(RootToViewportPoint.X, RootToViewportPoint.Y)
+                
+                -- Auto Shoot Logic
+                if library.flags["SilentAutoShoot"] then
+                    local cooldown = library.flags["SilentAutoShootCooldown"] or 0.05
+                    if currentTime - LastSilentShotTime >= cooldown then
+                        mouse1press()
+                        wait()
+                        mouse1release()
+                        LastSilentShotTime = currentTime
+                    end
+                end
             else 
                 SilentTargetIndicator.Visible = false 
             end
@@ -989,7 +1065,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     local Origin = A_Ray.Origin
-                    local Direction = getDirection(Origin, HitPart.Position)
+                    local Direction = getDirection(Origin, applySilentPrediction(HitPart))
                     Arguments[2] = Ray.new(Origin, Direction)
                     return oldNamecall(unpack(Arguments))
                 end
@@ -1000,7 +1076,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     local Origin = A_Ray.Origin
-                    local Direction = getDirection(Origin, HitPart.Position)
+                    local Direction = getDirection(Origin, applySilentPrediction(HitPart))
                     Arguments[2] = Ray.new(Origin, Direction)
                     return oldNamecall(unpack(Arguments))
                 end
@@ -1011,7 +1087,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local HitPart = getClosestPlayer()
                 if HitPart then
                     local Origin = A_Ray.Origin
-                    local Direction = getDirection(Origin, HitPart.Position)
+                    local Direction = getDirection(Origin, applySilentPrediction(HitPart))
                     Arguments[2] = Ray.new(Origin, Direction)
                     return oldNamecall(unpack(Arguments))
                 end
@@ -1021,7 +1097,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 local A_Origin = Arguments[2]
                 local HitPart = getClosestPlayer()
                 if HitPart then
-                    Arguments[3] = getDirection(A_Origin, HitPart.Position)
+                    Arguments[3] = getDirection(A_Origin, applySilentPrediction(HitPart))
                     return oldNamecall(unpack(Arguments))
                 end
             end
@@ -1035,21 +1111,26 @@ local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
     if library.flags["SilentAimEnabled"] and not checkcaller() then
         local silentMethod = library.flags["SilentMethod"]
+        local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
         
-        if key == "Hit" and (silentMethod == "Mouse.Hit" or silentMethod == "All Methods") then
-            local HitPart = getClosestPlayer()
-            if HitPart then
-                return HitPart.CFrame
-            end
-        elseif key == "Target" and (silentMethod == "Mouse.Target" or silentMethod == "All Methods") then
-            local HitPart = getClosestPlayer()
-            if HitPart then
-                return HitPart
-            end
-        elseif key == "UnitRay" and (silentMethod == "Mouse.UnitRay" or silentMethod == "All Methods") then
-            local HitPart = getClosestPlayer()
-            if HitPart then
-                return Ray.new(Camera.CFrame.Position, (HitPart.Position - Camera.CFrame.Position).Unit)
+        if chance then
+            if key == "Hit" and (silentMethod == "Mouse.Hit" or silentMethod == "All Methods") then
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local targetPos = applySilentPrediction(HitPart)
+                    return CFrame.new(targetPos)
+                end
+            elseif key == "Target" and (silentMethod == "Mouse.Target" or silentMethod == "All Methods") then
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    return HitPart
+                end
+            elseif key == "UnitRay" and (silentMethod == "Mouse.UnitRay" or silentMethod == "All Methods") then
+                local HitPart = getClosestPlayer()
+                if HitPart then
+                    local targetPos = applySilentPrediction(HitPart)
+                    return Ray.new(Camera.CFrame.Position, (targetPos - Camera.CFrame.Position).Unit)
+                end
             end
         end
     end
@@ -1060,13 +1141,34 @@ end))
 local oldGetMouseLocation
 oldGetMouseLocation = hookfunction(UserInputService.GetMouseLocation, function(...)
     if library.flags["SilentAimEnabled"] and library.flags["SilentMethod"] == "GetMouseLocation" then
-        local HitPart = getClosestPlayer()
-        if HitPart then
-            local Vec3, OnScreen = WorldToViewportPoint(Camera, HitPart.Position)
-            if OnScreen then
-                return Vector2.new(Vec3.X, Vec3.Y)
+        local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
+        if chance then
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                local targetPos = applySilentPrediction(HitPart)
+                local Vec3, OnScreen = WorldToViewportPoint(Camera, targetPos)
+                if OnScreen then
+                    return Vector2.new(Vec3.X, Vec3.Y)
+                end
             end
         end
     end
     return oldGetMouseLocation(...)
 end)
+
+-- Camera CFrame hook for camera-based silent aim
+local oldNewIndex
+oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
+    if library.flags["SilentAimEnabled"] and library.flags["SilentMethod"] == "Camera.CFrame" and not checkcaller() then
+        local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
+        if chance and self == Camera and key == "CFrame" then
+            local HitPart = getClosestPlayer()
+            if HitPart then
+                local targetPos = applySilentPrediction(HitPart)
+                local newCFrame = CFrame.new(value.Position, targetPos)
+                return oldNewIndex(self, key, newCFrame)
+            end
+        end
+    end
+    return oldNewIndex(self, key, value)
+end))
