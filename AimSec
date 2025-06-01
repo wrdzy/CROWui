@@ -9,14 +9,24 @@ local LocalPlayer        = Players.LocalPlayer
 local Mouse              = LocalPlayer:GetMouse()
 
 -- Drawing Objects
-local FOVCircle          = Drawing.new("Circle")
-FOVCircle.Thickness      = 2
-FOVCircle.NumSides       = 60
-FOVCircle.Position       = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-FOVCircle.Radius         = 100
-FOVCircle.Color          = Color3.new(0, 0, 255)
-FOVCircle.Transparency   = 1 - 0.5
-FOVCircle.Visible        = false
+local AimLockFOVCircle          = Drawing.new("Circle")
+AimLockFOVCircle.Thickness      = 2
+AimLockFOVCircle.NumSides       = 60
+AimLockFOVCircle.Position       = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+AimLockFOVCircle.Radius         = 100
+AimLockFOVCircle.Color          = Color3.new(0, 0, 1)
+AimLockFOVCircle.Transparency   = 1
+AimLockFOVCircle.Visible        = false
+
+-- Drawing Objects
+local SilentAimFOVCircle          = Drawing.new("Circle")
+SilentAimFOVCircle.Thickness      = 2
+SilentAimFOVCircle.NumSides       = 60
+SilentAimFOVCircle.Position       = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+SilentAimFOVCircle.Radius         = 100
+SilentAimFOVCircle.Color          = Color3.new(0, 0, 1)
+SilentAimFOVCircle.Transparency   = 1
+SilentAimFOVCircle.Visible        = false
 
 local InfoBox            = Drawing.new("Square")
 InfoBox.Size             = Vector2.new(200, 60)
@@ -47,16 +57,16 @@ local TargetIndicator    = Drawing.new("Circle")
 TargetIndicator.Thickness = 2
 TargetIndicator.NumSides = 4
 TargetIndicator.Radius   = 5
-TargetIndicator.Color     = Color3.new(0, 0, 255)
-TargetIndicator.Transparency = 1 - 0.5
+TargetIndicator.Color     = Color3.new(0, 0, 1)
+TargetIndicator.Transparency = 1
 TargetIndicator.Visible  = false
 
 local SilentTargetIndicator = Drawing.new("Circle")
 SilentTargetIndicator.Thickness = 2
 SilentTargetIndicator.NumSides = 4
 SilentTargetIndicator.Radius = 5
-SilentTargetIndicator.Color = Color3.new(255, 0, 0)
-SilentTargetIndicator.Transparency = 0.5
+SilentTargetIndicator.Color = Color3.new(1, 0, 0)
+SilentTargetIndicator.Transparency = 1
 SilentTargetIndicator.Visible = false
 
 -- State Variables
@@ -180,9 +190,9 @@ end
 
 local function UpdateFOVPosition()
     if library.flags["AimMethod"] == "Camera" then
-        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+        AimLockFOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     else
-        FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+        AimLockFOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
     end
 end
 
@@ -225,7 +235,7 @@ local function SetupFOVTracking()
     if library.flags["AimMethod"] == "Mouse" then
         MouseMoveConnection = UserInputService.InputChanged:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseMovement then
-                FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
+                AimLockFOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + FOV_OFFSET_Y)
             end
         end)
     end
@@ -306,10 +316,10 @@ local function StartAimlock()
         local partsList       = library.flags["TargetParts"] or {"Head"}
         local fovSize         = library.flags["FOVSize"] or 100
         local autoShoot       = library.flags["AutoShoot"] or false
-        local shootCooldown   = library.flags["AutoShootCooldown"] or 0.02
+        local shootCooldown   = library.flags["AutoShootCooldown"] or 0.01
 
-        FOVCircle.Radius  = fovSize
-        FOVCircle.Visible = true
+        AimLockFOVCircle.Radius  = fovSize
+        AimLockFOVCircle.Visible = true
 
         if CurrentTarget then
             local char     = CurrentTarget.Character
@@ -400,7 +410,7 @@ end
 
 local function StopAimlock()
     Cleanup()
-    FOVCircle.Visible = false
+    AimLockFOVCircle.Visible = false
     InfoBox.Visible = false
     InfoBorder.Visible = false
     StatusText.Visible = false
@@ -416,7 +426,7 @@ local secaim = _G.Aimlock:AddSection("Aim Lock", 1)
 secaim:AddSeparator({ text = "Main" })
 
 local aimlockToggle = secaim:AddToggle({
-    text    = "Aim Lock",
+    text    = "Key Aim Lock",
     state   = false,
     flag    = "AimlockEnabled",
     tooltip = "Toggle the aim lock",
@@ -523,7 +533,7 @@ secaim:AddSlider({
     flag      = "FOVSize",
     tooltip   = "Aim FOV radius",
     callback  = function(v)
-        FOVCircle.Radius = v
+        AimLockFOVCircle.Radius = v
         CurrentTarget, CurrentTargetPart = nil, nil
     end
 })
@@ -534,7 +544,7 @@ secaim:AddSlider({
     min       = 0.01,
     max       = 1.0,
     increment = 0.01,
-    default   = 0.02,
+    default   = 0.01,
     suffix    = "s",
     flag      = "AutoShootCooldown",
     tooltip   = "Time between auto shots"
@@ -565,19 +575,19 @@ local secedit = _G.Aimlock:AddSection("Aim Lock Visuals", 1)
 secedit:AddSeparator({ text = "Colors" })
 secedit:AddColor({
     text     = "FOV Circle Color",
-    color    = Color3.new(0, 0, 255),
-    trans    = 0.5,
+    color    = Color3.new(0, 0, 1),
+    trans    = 0,
     flag     = "FOVColor",
     tooltip  = "Circle color/transparency",
     callback = function(c,t)
-        FOVCircle.Color        = c
-        FOVCircle.Transparency = FixTransparency(t)
+        AimLockFOVCircle.Color        = c
+        AimLockFOVCircle.Transparency = FixTransparency(t)
     end
 })
 secedit:AddColor({
     text     = "Indicator Color",
-    color    = Color3.new(0, 0, 255),
-    trans    = 0.5,
+    color    = Color3.new(0, 0, 1),
+    trans    = 0,
     flag     = "IndicatorColor",
     tooltip  = "Indicator color/transparency",
     callback = function(c,t)
@@ -623,7 +633,7 @@ fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 1
-fov_circle.Color = Color3.fromRGB(0, 0, 255)
+fov_circle.Color = Color3.fromRGB(255, 0, 0)
 
 -- Expected Arguments for hooking - EXPANDED TO INCLUDE MORE METHODS
 local ExpectedArguments = {
@@ -819,7 +829,8 @@ end
 
 -- Function to update FOV visibility
 local function updateFOVVisibility()
-    fov_circle.Visible = library.flags["SilentAimEnabled"]
+    local isActive = library.flags["SilentAimEnabled"] and (library.flags["SilentAimActive"] ~= false)
+    fov_circle.Visible = isActive
 end
 
 -- ===================== SILENT AIM UI SECTION =====================
@@ -828,7 +839,7 @@ local SilentAimSection = _G.Aimlock:AddSection("Silent Aim", 2)
 SilentAimSection:AddSeparator({ text = "Main" })
 
 SilentAimSection:AddToggle({
-    text = "Silent Aim",
+    text = "Enabled",
     state = false,
     flag = "SilentAimEnabled",
     callback = function(state)
@@ -842,9 +853,13 @@ SilentAimSection:AddToggle({
     bind = "NONE",
     flag = "SilentAimToggleKey",
     callback = function(state)
-        updateFOVVisibility()
-        -- Clear cache when toggling
-        CachedClosestPlayer = nil
+        -- Only allow keybind to work if main toggle is enabled
+        if library.flags["SilentAimEnabled"] then
+            library.flags["SilentAimActive"] = state
+            updateFOVVisibility()
+            -- Clear cache when toggling
+            CachedClosestPlayer = nil
+        end
     end
 })
 
@@ -986,8 +1001,8 @@ SilentVisualsSection:AddSeparator({ text = "Target Indicators" })
 
 SilentVisualsSection:AddColor({
     text = "Target Indicator Color",
-    color = Color3.new(255, 0, 0),
-    trans = 0.5,
+    color = Color3.new(1, 0, 0),
+    trans = 0,
     flag = "SilentIndicatorColor",
     callback = function(color, trans)
         SilentTargetIndicator.Color = color
@@ -1012,7 +1027,9 @@ resume(create(function()
         end
         lastRenderTime = currentTime
         
-        if library.flags["SilentAimEnabled"] then
+        local silentAimActive = library.flags["SilentAimEnabled"] and (library.flags["SilentAimActive"] ~= false)
+        
+        if silentAimActive then
             local target = getClosestPlayer()
             if target then 
                 local Root = target.Parent.PrimaryPart or target
@@ -1023,7 +1040,7 @@ resume(create(function()
                 
                 -- Auto Shoot Logic
                 if library.flags["SilentAutoShoot"] then
-                    local cooldown = library.flags["SilentAutoShootCooldown"] or 0.05
+                    local cooldown = library.flags["SilentAutoShootCooldown"] or 0.01
                     if currentTime - LastSilentShotTime >= cooldown then
                         mouse1press()
                         wait()
@@ -1038,8 +1055,8 @@ resume(create(function()
             SilentTargetIndicator.Visible = false
         end
         
-        -- Updated FOV circle logic - always show when Silent Aim is enabled
-        if library.flags["SilentAimEnabled"] then 
+        -- Updated FOV circle logic - always show when Silent Aim is enabled and active
+        if silentAimActive then 
             fov_circle.Visible = true
             fov_circle.Position = getMousePosition()
         else
@@ -1056,7 +1073,9 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local self = Arguments[1]
     local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
     
-    if library.flags["SilentAimEnabled"] and self == workspace and not checkcaller() and chance == true then
+    local silentAimActive = library.flags["SilentAimEnabled"] and (library.flags["SilentAimActive"] ~= false)
+    
+    if silentAimActive and self == workspace and not checkcaller() and chance == true then
         local silentMethod = library.flags["SilentMethod"]
         
         if (Method == "FindPartOnRayWithIgnoreList" and (silentMethod == Method or silentMethod == "All Methods")) then
@@ -1109,7 +1128,7 @@ end))
 -- Index hook for additional methods
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-    if library.flags["SilentAimEnabled"] and not checkcaller() then
+    if library.flags["SilentAimEnabled"] and (library.flags["SilentAimActive"] ~= false) and not checkcaller() then
         local silentMethod = library.flags["SilentMethod"]
         local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
         
@@ -1140,7 +1159,7 @@ end))
 -- Alternative method using GetMouseLocation hook
 local oldGetMouseLocation
 oldGetMouseLocation = hookfunction(UserInputService.GetMouseLocation, function(...)
-    if library.flags["SilentAimEnabled"] and library.flags["SilentMethod"] == "GetMouseLocation" then
+    if library.flags["SilentAimEnabled"] and (library.flags["SilentAimActive"] ~= false) and library.flags["SilentMethod"] == "GetMouseLocation" then
         local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
         if chance then
             local HitPart = getClosestPlayer()
@@ -1159,7 +1178,7 @@ end)
 -- Camera CFrame hook for camera-based silent aim
 local oldNewIndex
 oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
-    if library.flags["SilentAimEnabled"] and library.flags["SilentMethod"] == "Camera.CFrame" and not checkcaller() then
+    if library.flags["SilentAimEnabled"] and (library.flags["SilentAimActive"] ~= false) and library.flags["SilentMethod"] == "Camera.CFrame" and not checkcaller() then
         local chance = CalculateChance(library.flags["SilentHitChance"] or 100)
         if chance and self == Camera and key == "CFrame" then
             local HitPart = getClosestPlayer()
