@@ -15,7 +15,7 @@ FOVCircle.Thickness      = 2
 FOVCircle.NumSides       = 60
 FOVCircle.Position       = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 FOVCircle.Radius         = 100
-FOVCircle.Color          = Color3.new(1,1,1)
+FOVCircle.Color          = Color3.new(0, 0, 255)
 FOVCircle.Transparency   = 1 - 0.5
 FOVCircle.Visible        = false
 
@@ -48,7 +48,7 @@ local TargetIndicator    = Drawing.new("Circle")
 TargetIndicator.Thickness = 2
 TargetIndicator.NumSides = 4
 TargetIndicator.Radius   = 5
-TargetIndicator.Color     = Color3.new(1,1,1)
+TargetIndicator.Color     = Color3.new(0, 0, 255)
 TargetIndicator.Transparency = 1 - 0.5
 TargetIndicator.Visible  = false
 
@@ -497,10 +497,10 @@ secaim:AddSeparator({ text = "Misc" })
 
 secaim:AddSlider({
     text      = "Mouse Smoothness",
-    min       = 0,
+    min       = 0.1,
     max       = 1.0,
     increment = 0.05,
-    default   = 0,
+    default   = 0.1,
     flag      = "Smoothness",
     tooltip   = "Higher = smoother"
 })
@@ -510,7 +510,7 @@ secaim:AddSlider({
     min       = 50,
     max       = 500,
     increment = 1,
-    default   = 100,
+    default   = 50,
     suffix    = "px",
     flag      = "FOVSize",
     tooltip   = "Aim FOV radius",
@@ -532,20 +532,20 @@ secaim:AddList({
 
 secaim:AddSlider({
     text      = "Manual Prediction",
-    min       = 0,
+    min       = 0.1,
     max       = 0.5,
     increment = 0.01,
-    default   = 0,
+    default   = 0.1,
     flag      = "ManualPrediction",
     tooltip   = "Manual prediction strength"
 })
 
-local secedit = _G.Aimlock:AddSection("Customize", 1)
+local secedit = _G.Aimlock:AddSection("Aim Lock Customize", 1)
 
 secedit:AddSeparator({ text = "Colors" })
 secedit:AddColor({
     text     = "FOV Circle Color",
-    color    = Color3.new(1,1,1),
+    color    = Color3.new(0, 0, 255),
     trans    = 0.5,
     flag     = "FOVColor",
     tooltip  = "Circle color/transparency",
@@ -556,7 +556,7 @@ secedit:AddColor({
 })
 secedit:AddColor({
     text     = "Indicator Color",
-    color    = Color3.new(1,1,1),
+    color    = Color3.new(0, 0, 255),
     trans    = 0.5,
     flag     = "IndicatorColor",
     tooltip  = "Indicator color/transparency",
@@ -587,7 +587,7 @@ local create = coroutine.create
 -- Performance optimization: Cache mouse position
 local CachedMousePosition = Vector2.new(0, 0)
 local LastMouseUpdate = 0
-local MOUSE_UPDATE_INTERVAL = 0.016 -- ~60 FPS
+local MOUSE_UPDATE_INTERVAL = 0.001 -- ~60 FPS
 
 -- Performance optimization: Cache closest player
 local CachedClosestPlayer = nil
@@ -603,13 +603,13 @@ fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 1
-fov_circle.Color = Color3.fromRGB(54, 57, 241)
+fov_circle.Color = Color3.fromRGB(0, 0, 255)
 
 local SilentTargetIndicator = Drawing.new("Circle")
 SilentTargetIndicator.Thickness = 2
 SilentTargetIndicator.NumSides = 4
 SilentTargetIndicator.Radius = 5
-SilentTargetIndicator.Color = Color3.new(1,1,1)
+SilentTargetIndicator.Color = Color3.new(0, 0, 255)
 SilentTargetIndicator.Transparency = 0.5
 SilentTargetIndicator.Visible = false
 
@@ -873,10 +873,10 @@ SilentAimSection:AddList({
 
 SilentAimSection:AddSlider({
     text = "Hit Chance",
-    min = 0,
+    min = 1,
     max = 100,
     increment = 1,
-    default = 100,
+    default = 1,
     suffix = "%",
     flag = "SilentHitChance"
 })
@@ -888,7 +888,7 @@ SilentCustomizeSection:AddSeparator({ text = "Field Of View" })
 
 SilentCustomizeSection:AddSlider({
     text = "FOV Size",
-    min = 0,
+    min = 50,
     max = 360,
     increment = 1,
     default = 50,
@@ -902,7 +902,7 @@ SilentCustomizeSection:AddSlider({
 
 SilentCustomizeSection:AddColor({
     text = "FOV Circle Color",
-    color = Color3.fromRGB(54, 57, 241),
+    color = Color3.fromRGB(255, 0, 0),
     trans = 0,
     flag = "SilentFOVColor",
     callback = function(color, trans)
@@ -924,7 +924,7 @@ SilentCustomizeSection:AddToggle({
 
 SilentCustomizeSection:AddColor({
     text = "Indicator Color",
-    color = Color3.new(1,1,1),
+    color = Color3.new(255, 0, 0),
     trans = 0.5,
     flag = "SilentIndicatorColor",
     callback = function(color, trans)
