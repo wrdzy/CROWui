@@ -1,1 +1,765 @@
+-- Services
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+-- World Variables
+_G.World = _G.World or {}
+_G.World.OriginalSettings = {}
+_G.World.ColorCorrection = nil
+_G.World.DepthOfField = nil
+_G.World.Blur = nil
+_G.World.SunRays = nil
+_G.World.Bloom = nil
+_G.World.StretchConnection = nil
 
+-- Store original lighting settings
+local function storeOriginalSettings()
+    _G.World.OriginalSettings = {
+        Brightness = Lighting.Brightness,
+        Ambient = Lighting.Ambient,
+        ColorShift_Bottom = Lighting.ColorShift_Bottom,
+        ColorShift_Top = Lighting.ColorShift_Top,
+        EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+        EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+        GlobalShadows = Lighting.GlobalShadows,
+        OutdoorAmbient = Lighting.OutdoorAmbient,
+        ShadowSoftness = Lighting.ShadowSoftness,
+        ClockTime = Lighting.ClockTime,
+        ExposureCompensation = Lighting.ExposureCompensation,
+        FogStart = Lighting.FogStart,
+        FogEnd = Lighting.FogEnd,
+        FogColor = Lighting.FogColor
+    }
+end
+
+-- Function to create/get ColorCorrection effect
+local function getColorCorrection()
+    if not _G.World.ColorCorrection then
+        _G.World.ColorCorrection = Instance.new("ColorCorrectionEffect")
+        _G.World.ColorCorrection.Parent = Lighting
+        _G.World.ColorCorrection.Name = "CROW_ColorCorrection"
+    end
+    return _G.World.ColorCorrection
+end
+
+-- Function to create/get DepthOfField effect (FIXED)
+local function getDepthOfField()
+    if not _G.World.DepthOfField then
+        _G.World.DepthOfField = Instance.new("DepthOfFieldEffect")
+        _G.World.DepthOfField.Parent = Lighting
+        _G.World.DepthOfField.Name = "CROW_DepthOfField"
+        -- Set default values when creating
+        _G.World.DepthOfField.FarIntensity = 0.75
+        _G.World.DepthOfField.FocusDistance = 50
+        _G.World.DepthOfField.InFocusRadius = 10
+        _G.World.DepthOfField.NearIntensity = 0.75
+        _G.World.DepthOfField.Enabled = false
+    end
+    return _G.World.DepthOfField
+end
+
+-- Function to create/get Blur effect
+local function getBlur()
+    if not _G.World.Blur then
+        _G.World.Blur = Instance.new("BlurEffect")
+        _G.World.Blur.Parent = Lighting
+        _G.World.Blur.Name = "CROW_Blur"
+    end
+    return _G.World.Blur
+end
+
+-- Function to create/get SunRays effect
+local function getSunRays()
+    if not _G.World.SunRays then
+        _G.World.SunRays = Instance.new("SunRaysEffect")
+        _G.World.SunRays.Parent = Lighting
+        _G.World.SunRays.Name = "CROW_SunRays"
+    end
+    return _G.World.SunRays
+end
+
+-- Function to create/get Bloom effect
+local function getBloom()
+    if not _G.World.Bloom then
+        _G.World.Bloom = Instance.new("BloomEffect")
+        _G.World.Bloom.Parent = Lighting
+        _G.World.Bloom.Name = "CROW_Bloom"
+    end
+    return _G.World.Bloom
+end
+
+-- Function to restore original lighting
+local function restoreOriginalLighting()
+    for property, value in pairs(_G.World.OriginalSettings) do
+        if Lighting[property] ~= nil then
+            Lighting[property] = value
+        end
+    end
+end
+
+-- Function to apply horizontal stretch
+local function applyHorizontalStretch(intensity)
+    if _G.World.StretchConnection then
+        _G.World.StretchConnection:Disconnect()
+        _G.World.StretchConnection = nil
+    end
+    
+    if intensity > 1 then
+        _G.World.StretchConnection = RunService.Heartbeat:Connect(function()
+            local camera = workspace.CurrentCamera
+            if camera then
+                -- Apply horizontal stretch by modifying CFrame
+                local cf = camera.CFrame
+                camera.CFrame = cf * CFrame.new(0, 0, 0, intensity, 0, 0, 0, 1, 0, 0, 0, 1)
+            end
+        end)
+    end
+end
+
+-- Function to disable horizontal stretch
+local function disableHorizontalStretch()
+    if _G.World.StretchConnection then
+        _G.World.StretchConnection:Disconnect()
+        _G.World.StretchConnection = nil
+    end
+end
+
+-- Initialize original settings
+storeOriginalSettings()
+
+-- UI Sections with improved safety checks
+local LightingSection, ColorSection, VisualSection, UtilitySection
+
+-- First, verify that _G.WorldTab exists
+if not _G.WorldTab then
+    _G.CROW:SendNotification("WorldTab not found! Make sure the main script is loaded first.", 5)
+    return
+end
+
+-- Create sections with individual error handling
+local function createSections()
+    local success = true
+    local errorMsg = ""
+    
+    -- Try to create each section individually
+    local sectionSuccess, sectionError = pcall(function()
+        LightingSection = _G.WorldTab:AddSection("Lighting Effects", 1)
+    end)
+    if not sectionSuccess then
+        success = false
+        errorMsg = errorMsg .. "LightingSection: " .. tostring(sectionError) .. " | "
+    end
+    
+    sectionSuccess, sectionError = pcall(function()
+        ColorSection = _G.WorldTab:AddSection("Color Effects", 1)
+    end)
+    if not sectionSuccess then
+        success = false
+        errorMsg = errorMsg .. "ColorSection: " .. tostring(sectionError) .. " | "
+    end
+    
+    sectionSuccess, sectionError = pcall(function()
+        UtilitySection = _G.WorldTab:AddSection("Utilities", 1)
+    end)
+    if not sectionSuccess then
+        success = false
+        errorMsg = errorMsg .. "UtilitySection: " .. tostring(sectionError) .. " | "
+    end
+    
+    sectionSuccess, sectionError = pcall(function()
+        VisualSection = _G.WorldTab:AddSection("Visual Effects", 2)
+    end)
+    if not sectionSuccess then
+        success = false
+        errorMsg = errorMsg .. "VisualSection: " .. tostring(sectionError) .. " | "
+    end
+    
+    return success, errorMsg
+end
+
+local success, error = createSections()
+
+if not success then
+    _G.CROW:SendNotification("Failed to create World sections: " .. error, 5)
+    return
+end
+
+-- Additional safety check - verify all sections were created
+if not LightingSection then
+    _G.CROW:SendNotification("LightingSection is nil!", 5)
+    return
+end
+
+if not ColorSection then
+    _G.CROW:SendNotification("ColorSection is nil!", 5)
+    return
+end
+
+if not VisualSection then
+    _G.CROW:SendNotification("VisualSection is nil!", 5)
+    return
+end
+
+if not UtilitySection then
+    _G.CROW:SendNotification("UtilitySection is nil!", 5)
+    return
+end
+
+-- ===================== LIGHTING EFFECTS =====================
+LightingSection:AddSeparator({ text = "Basic Lighting" })
+
+LightingSection:AddToggle({
+    text = "Full Bright",
+    state = false,
+    flag = "FullBright",
+    tooltip = "Makes everything fully visible",
+    callback = function(state)
+        if state then
+            Lighting.Brightness = 2
+            Lighting.Ambient = Color3.new(1, 1, 1)
+            Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
+            Lighting.ColorShift_Top = Color3.new(1, 1, 1)
+            Lighting.EnvironmentDiffuseScale = 1
+            Lighting.EnvironmentSpecularScale = 1
+            Lighting.GlobalShadows = false
+            Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+            Lighting.ShadowSoftness = 0
+        else
+            restoreOriginalLighting()
+        end
+    end
+})
+
+LightingSection:AddToggle({
+    text = "No Shadows",
+    state = false,
+    flag = "NoShadows",
+    tooltip = "Removes all shadows",
+    callback = function(state)
+        Lighting.GlobalShadows = not state
+    end
+})
+
+LightingSection:AddToggle({
+    text = "No Fog",
+    state = false,
+    flag = "NoFog",
+    tooltip = "Removes all fog effects",
+    callback = function(state)
+        if state then
+            Lighting.FogStart = 0
+            Lighting.FogEnd = math.huge
+        else
+            Lighting.FogStart = _G.World.OriginalSettings.FogStart
+            Lighting.FogEnd = _G.World.OriginalSettings.FogEnd
+        end
+    end
+})
+
+LightingSection:AddSlider({
+    enabled = true,
+    text = "Brightness",
+    tooltip = "Adjust world brightness",
+    flag = "WorldBrightness",
+    suffix = "",
+    min = 0,
+    max = 5,
+    increment = 0.1,
+    risky = false,
+    callback = function(value)
+        Lighting.Brightness = value
+    end
+})
+
+LightingSection:AddSlider({
+    enabled = true,
+    text = "Exposure",
+    tooltip = "Adjust exposure compensation",
+    flag = "WorldExposure",
+    suffix = "",
+    min = -3,
+    max = 3,
+    increment = 0.1,
+    risky = false,
+    callback = function(value)
+        Lighting.ExposureCompensation = value
+    end
+})
+
+-- ===================== COLOR EFFECTS =====================
+ColorSection:AddSeparator({ text = "Color Correction" })
+
+ColorSection:AddToggle({
+    text = "Enable Color Correction",
+    state = false,
+    flag = "ColorCorrectionEnabled",
+    tooltip = "Enable color correction effects",
+    callback = function(state)
+        local cc = getColorCorrection()
+        cc.Enabled = state
+    end
+})
+
+ColorSection:AddSlider({
+    enabled = true,
+    text = "Brightness",
+    tooltip = "Color correction brightness",
+    flag = "CCBrightness",
+    suffix = "",
+    min = -1,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local cc = getColorCorrection()
+        cc.Brightness = value
+    end
+})
+
+ColorSection:AddSlider({
+    enabled = true,
+    text = "Contrast",
+    tooltip = "Color correction contrast",
+    flag = "CCContrast",
+    suffix = "",
+    min = -1,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local cc = getColorCorrection()
+        cc.Contrast = value
+    end
+})
+
+ColorSection:AddSlider({
+    enabled = true,
+    text = "Saturation",
+    tooltip = "Color correction saturation",
+    flag = "CCSaturation",
+    suffix = "",
+    min = -1,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local cc = getColorCorrection()
+        cc.Saturation = value
+    end
+})
+
+ColorSection:AddColor({
+    enabled = true,
+    text = "Tint Color",
+    tooltip = "Apply color tint to the world",
+    color = Color3.fromRGB(255, 255, 255),
+    flag = "CCTintColor",
+    trans = 0,
+    open = false,
+    risky = false,
+    callback = function(color)
+        local cc = getColorCorrection()
+        cc.TintColor = color
+    end
+})
+
+ColorSection:AddSeparator({ text = "Lighting Colors" })
+
+ColorSection:AddColor({
+    enabled = true,
+    text = "Ambient Color",
+    tooltip = "Change ambient lighting color",
+    color = Color3.fromRGB(128, 128, 128),
+    flag = "AmbientColor",
+    trans = 0,
+    open = false,
+    risky = false,
+    callback = function(color)
+        Lighting.Ambient = color
+    end
+})
+
+ColorSection:AddColor({
+    enabled = true,
+    text = "Fog Color",
+    tooltip = "Change fog color",
+    color = Color3.fromRGB(192, 192, 192),
+    flag = "FogColor",
+    trans = 0,
+    open = false,
+    risky = false,
+    callback = function(color)
+        Lighting.FogColor = color
+    end
+})
+
+ColorSection:AddColor({
+    enabled = true,
+    text = "Outdoor Ambient",
+    tooltip = "Change outdoor ambient color",
+    color = Color3.fromRGB(128, 128, 128),
+    flag = "OutdoorAmbientColor",
+    trans = 0,
+    open = false,
+    risky = false,
+    callback = function(color)
+        Lighting.OutdoorAmbient = color
+    end
+})
+
+-- ===================== VISUAL EFFECTS =====================
+VisualSection:AddSeparator({ text = "Screen Effects" })
+
+VisualSection:AddToggle({
+    text = "Blur Effect",
+    state = false,
+    flag = "BlurEnabled",
+    tooltip = "Apply blur effect to screen",
+    callback = function(state)
+        local blur = getBlur()
+        blur.Enabled = state
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Blur Size",
+    tooltip = "Blur effect intensity",
+    flag = "BlurSize",
+    suffix = "",
+    min = 0,
+    max = 56,
+    increment = 1,
+    risky = false,
+    callback = function(value)
+        local blur = getBlur()
+        blur.Size = value
+    end
+})
+
+VisualSection:AddToggle({
+    text = "Depth of Field",
+    state = false,
+    flag = "DepthOfFieldEnabled",
+    tooltip = "Apply depth of field effect",
+    callback = function(state)
+        local dof = getDepthOfField()
+        dof.Enabled = state
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Focus Distance",
+    tooltip = "Depth of field focus distance",
+    flag = "DOFFocusDistance",
+    suffix = "",
+    min = 0.1,
+    max = 200,
+    increment = 0.5,
+    risky = false,
+    callback = function(value)
+        local dof = getDepthOfField()
+        dof.FocusDistance = value
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "In Focus Radius",
+    tooltip = "Depth of field in focus radius",
+    flag = "DOFInFocusRadius",
+    suffix = "",
+    min = 1,
+    max = 100,
+    increment = 1,
+    risky = false,
+    callback = function(value)
+        local dof = getDepthOfField()
+        dof.InFocusRadius = value
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Far Intensity",
+    tooltip = "Depth of field far blur intensity",
+    flag = "DOFFarIntensity",
+    suffix = "",
+    min = 0,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local dof = getDepthOfField()
+        dof.FarIntensity = value
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Near Intensity",
+    tooltip = "Depth of field near blur intensity",
+    flag = "DOFNearIntensity",
+    suffix = "",
+    min = 0,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local dof = getDepthOfField()
+        dof.NearIntensity = value
+    end
+})
+
+VisualSection:AddToggle({
+    text = "Bloom Effect",
+    state = false,
+    flag = "BloomEnabled",
+    tooltip = "Apply bloom glow effect",
+    callback = function(state)
+        local bloom = getBloom()
+        bloom.Enabled = state
+        if state then
+            bloom.Intensity = 0.4
+            bloom.Size = 24
+            bloom.Threshold = 1.2
+        end
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Bloom Intensity",
+    tooltip = "Bloom effect intensity",
+    flag = "BloomIntensity",
+    suffix = "",
+    min = 0,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local bloom = getBloom()
+        bloom.Intensity = value
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Bloom Size",
+    tooltip = "Bloom effect size",
+    flag = "BloomSize",
+    suffix = "",
+    min = 1,
+    max = 56,
+    increment = 1,
+    risky = false,
+    callback = function(value)
+        local bloom = getBloom()
+        bloom.Size = value
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Bloom Threshold",
+    tooltip = "Bloom effect threshold",
+    flag = "BloomThreshold",
+    suffix = "",
+    min = 0,
+    max = 2,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local bloom = getBloom()
+        bloom.Threshold = value
+    end
+})
+
+VisualSection:AddToggle({
+    text = "Sun Rays",
+    state = false,
+    flag = "SunRaysEnabled",
+    tooltip = "Apply sun rays effect",
+    callback = function(state)
+        local sunRays = getSunRays()
+        sunRays.Enabled = state
+        if state then
+            sunRays.Intensity = 0.25
+            sunRays.Spread = 1
+        end
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Sun Rays Intensity",
+    tooltip = "Sun rays effect intensity",
+    flag = "SunRaysIntensity",
+    suffix = "",
+    min = 0,
+    max = 1,
+    increment = 0.01,
+    risky = false,
+    callback = function(value)
+        local sunRays = getSunRays()
+        sunRays.Intensity = value
+    end
+})
+
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Sun Rays Spread",
+    tooltip = "Sun rays spread amount",
+    flag = "SunRaysSpread",
+    suffix = "",
+    min = 0.1,
+    max = 3,
+    increment = 0.1,
+    risky = false,
+    callback = function(value)
+        local sunRays = getSunRays()
+        sunRays.Spread = value
+    end
+})
+
+-- ===================== UTILITIES =====================
+UtilitySection:AddSeparator({ text = "Display Effects" })
+
+UtilitySection:AddToggle({
+    text = "Horizontal Stretch",
+    state = false,
+    flag = "HorizontalStretch",
+    tooltip = "Stretch the view horizontally",
+    callback = function(state)
+        if state then
+            applyHorizontalStretch(1.5) -- Default stretch intensity
+        else
+            disableHorizontalStretch()
+        end
+    end
+})
+
+UtilitySection:AddSlider({
+    enabled = true,
+    text = "Stretch Intensity",
+    tooltip = "How much to stretch horizontally",
+    flag = "StretchIntensity",
+    suffix = "x",
+    min = 1,
+    max = 3,
+    increment = 0.1,
+    risky = false,
+    callback = function(value)
+        applyHorizontalStretch(value)
+    end
+})
+
+UtilitySection:AddSeparator({ text = "Utility Functions" })
+
+UtilitySection:AddButton({
+    enabled = true,
+    text = "Restore Original Settings",
+    tooltip = "Reset all lighting to original values",
+    callback = function()
+        restoreOriginalLighting()
+        
+        -- Reset all effects
+        if _G.World.ColorCorrection then
+            _G.World.ColorCorrection.Enabled = false
+        end
+        if _G.World.Blur then
+            _G.World.Blur.Enabled = false
+        end
+        if _G.World.DepthOfField then
+            _G.World.DepthOfField.Enabled = false
+        end
+        if _G.World.SunRays then
+            _G.World.SunRays.Enabled = false
+        end
+        if _G.World.Bloom then
+            _G.World.Bloom.Enabled = false
+        end
+        
+        -- Disable stretch
+        disableHorizontalStretch()
+        
+        _G.CROW:SendNotification("Original settings restored", 3)
+    end
+})
+
+UtilitySection:AddButton({
+    enabled = true,
+    text = "Remove All Effects",
+    tooltip = "Remove all CROW lighting effects",
+    callback = function()
+        if _G.World.ColorCorrection then
+            _G.World.ColorCorrection:Destroy()
+            _G.World.ColorCorrection = nil
+        end
+        if _G.World.Blur then
+            _G.World.Blur:Destroy()
+            _G.World.Blur = nil
+        end
+        if _G.World.DepthOfField then
+            _G.World.DepthOfField:Destroy()
+            _G.World.DepthOfField = nil
+        end
+        if _G.World.SunRays then
+            _G.World.SunRays:Destroy()
+            _G.World.SunRays = nil
+        end
+        if _G.World.Bloom then
+            _G.World.Bloom:Destroy()
+            _G.World.Bloom = nil
+        end
+        
+        _G.CROW:SendNotification("All effects removed", 3)
+    end
+})
+
+UtilitySection:AddSlider({
+    enabled = true,
+    text = "Time of Day",
+    tooltip = "Change time of day",
+    flag = "TimeOfDay",
+    suffix = ":00",
+    min = 0,
+    max = 24,
+    increment = 0.5,
+    risky = false,
+    callback = function(value)
+        Lighting.ClockTime = value
+    end
+})
+
+-- Cleanup function
+_G.World.Cleanup = function()
+    restoreOriginalLighting()
+    
+    -- Restore GUI elements and FOV
+    toggleWidescreen(false)
+    restoreOriginalFOV()
+    
+    if _G.World.ColorCorrection then
+        _G.World.ColorCorrection:Destroy()
+        _G.World.ColorCorrection = nil
+    end
+    if _G.World.Blur then
+        _G.World.Blur:Destroy()
+        _G.World.Blur = nil
+    end
+    if _G.World.DepthOfField then
+        _G.World.DepthOfField:Destroy()
+        _G.World.DepthOfField = nil
+    end
+    if _G.World.SunRays then
+        _G.World.SunRays:Destroy()
+        _G.World.SunRays = nil
+    end
+    if _G.World.Bloom then
+        _G.World.Bloom:Destroy()
+        _G.World.Bloom = nil
+    end
+    
+    _G.CROW:SendNotification("World section cleaned up", 2)
+end
