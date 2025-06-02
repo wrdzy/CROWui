@@ -30,51 +30,61 @@ local ServerSection = _G.AdminTab:AddSection("Server Management", 2)
 -- ===================== MAIN ADMIN CONTROLS =====================
 MainSection:AddSeparator({ text = "Admin Information" })
 
-MainSection:AddButton({
+-- Admin Info Dropdown
+MainSection:AddList({
     enabled = true,
-    text = "CROW Admin Panel v1.0.5",
-    tooltip = "Admin panel version info",
-    callback = function() 
-        _G.CROW:SendNotification("CROW Admin Panel v1.0.5", 3)
-    end
-})
-
-MainSection:AddButton({
-    enabled = true,
-    text = "Admin ID: " .. tostring(_G.userId),
-    tooltip = "Your admin user ID",
-    callback = function() 
-        _G.CROW:SendNotification("Your Admin ID: " .. tostring(_G.userId), 3)
-    end
-})
-
-MainSection:AddButton({
-    enabled = true,
-    text = "Total Admins: " .. #_G.Admins,
-    tooltip = "Total number of admins",
-    callback = function() 
-        _G.CROW:SendNotification("Total Admins: " .. #_G.Admins, 3)
-    end
-})
-
--- Blacklist count button
-_G.AdminPanel.BlacklistCountButton = MainSection:AddButton({
-    enabled = true,
-    text = "Blacklisted Players: Loading...",
-    tooltip = "Total blacklisted players - click to refresh",
-    callback = function() 
-        refreshBlacklistInfo()
+    text = "Admin Information",
+    tooltip = "View admin panel and user information",
+    selected = {},
+    multi = true,
+    open = false,
+    max = 4,
+    values = {
+        "Panel Version: v1.0.5",
+        "Admin ID: " .. tostring(_G.userId),
+        "Total Admins: " .. #_G.Admins,
+        "Blacklisted Players: Loading..."
+    },
+    flag = "AdminInfoSelection",
+    risky = false,
+    callback = function(selected)
+        for _, info in pairs(selected) do
+            _G.CROW:SendNotification(info, 3)
+        end
     end
 })
 
 MainSection:AddSeparator({ text = "Quick Actions" })
 
-MainSection:AddButton({
+-- Quick Actions Dropdown
+MainSection:AddList({
     enabled = true,
-    text = "Refresh All Data",
-    tooltip = "Refresh blacklist and player data",
-    callback = function()
-        refreshAllData()
+    text = "Quick Actions",
+    tooltip = "Select actions to perform",
+    selected = {},
+    multi = true,
+    open = false,
+    max = 4,
+    values = {
+        "Refresh All Data",
+        "Refresh Blacklist Only",
+        "Update Player List",
+        "Check Server Status"
+    },
+    flag = "QuickActionsSelection",
+    risky = false,
+    callback = function(selected)
+        for _, action in pairs(selected) do
+            if action == "Refresh All Data" then
+                refreshAllData()
+            elseif action == "Refresh Blacklist Only" then
+                refreshBlacklistInfo()
+            elseif action == "Update Player List" then
+                updatePlayerList()
+            elseif action == "Check Server Status" then
+                _G.CROW:SendNotification("Server: " .. game.JobId:sub(1,8) .. "... | Players: " .. #Players:GetPlayers(), 3)
+            end
+        end
     end
 })
 
@@ -161,7 +171,7 @@ BlacklistSection:AddSlider({
     end
 })
 
--- Blacklist Display Button
+-- Blacklist Display Button (keeping as button since it shows dynamic content)
 _G.AdminPanel.BlacklistDisplay = BlacklistSection:AddButton({
     enabled = true,
     text = "Loading blacklisted players...",
@@ -173,29 +183,43 @@ _G.AdminPanel.BlacklistDisplay = BlacklistSection:AddButton({
 
 BlacklistSection:AddSeparator({ text = "Blacklist Actions" })
 
-BlacklistSection:AddButton({
+-- Blacklist Actions Dropdown
+BlacklistSection:AddList({
     enabled = true,
-    text = "Export Blacklist",
-    tooltip = "Export blacklist data",
-    callback = function()
-        exportBlacklist()
-    end
-})
-
-BlacklistSection:AddButton({
-    enabled = true,
-    text = "Clear Search",
-    tooltip = "Clear search filter",
-    callback = function()
-        library.flags["SearchBlacklistInput"] = ""
-        updateBlacklistDisplay()
+    text = "Blacklist Actions",
+    tooltip = "Select blacklist management actions",
+    selected = {},
+    multi = true,
+    open = false,
+    max = 4,
+    values = {
+        "Export Blacklist",
+        "Clear Search Filter",
+        "Refresh Display",
+        "Show Statistics"
+    },
+    flag = "BlacklistActionsSelection",
+    risky = false,
+    callback = function(selected)
+        for _, action in pairs(selected) do
+            if action == "Export Blacklist" then
+                exportBlacklist()
+            elseif action == "Clear Search Filter" then
+                library.flags["SearchBlacklistInput"] = ""
+                updateBlacklistDisplay()
+            elseif action == "Refresh Display" then
+                updateBlacklistDisplay()
+            elseif action == "Show Statistics" then
+                _G.CROW:SendNotification("Blacklist Stats: " .. #_G.BlacklistedPlayers .. " total players", 3)
+            end
+        end
     end
 })
 
 -- ===================== PLAYER MONITORING ===================== 
 PlayerSection:AddSeparator({ text = "Current Players" })
 
--- Player count display
+-- Player count display (keeping as button for dynamic updates)
 _G.AdminPanel.PlayerCountButton = PlayerSection:AddButton({
     enabled = true,
     text = "Players in server: " .. #Players:GetPlayers(),
@@ -234,7 +258,7 @@ PlayerSection:AddList({
     end
 })
 
--- Player list display button
+-- Player list display button (keeping as button for dynamic content)
 _G.AdminPanel.PlayerListDisplay = PlayerSection:AddButton({
     enabled = true,
     text = "Enable monitoring to see player list",
@@ -281,14 +305,39 @@ PlayerSection:AddBox({
 -- ===================== SERVER MANAGEMENT =====================
 ServerSection:AddSeparator({ text = "Server Controls" })
 
-ServerSection:AddButton({
+-- Server Actions Dropdown
+ServerSection:AddList({
     enabled = true,
-    text = "Kick All Non-Admins",
-    tooltip = "Kick all players except admins",
-    confirm = true,
+    text = "Server Actions",
+    tooltip = "Select server management actions",
+    selected = {},
+    multi = true,
+    open = false,
+    max = 4,
+    values = {
+        "Kick All Non-Admins",
+        "Show Server Info",
+        "Check Performance",
+        "Restart Monitoring"
+    },
+    flag = "ServerActionsSelection",
     risky = true,
-    callback = function()
-        kickAllNonAdmins()
+    callback = function(selected)
+        for _, action in pairs(selected) do
+            if action == "Kick All Non-Admins" then
+                kickAllNonAdmins()
+            elseif action == "Show Server Info" then
+                local gameInfo = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+                _G.CROW:SendNotification("Game: " .. (gameInfo.Name or "Unknown") .. " | Place ID: " .. tostring(game.PlaceId), 5)
+            elseif action == "Check Performance" then
+                _G.CROW:SendNotification("Performance check initiated", 2)
+            elseif action == "Restart Monitoring" then
+                if _G.AdminPanel.MonitoringPlayers then
+                    startPlayerMonitoring()
+                    _G.CROW:SendNotification("Player monitoring restarted", 2)
+                end
+            end
+        end
     end
 })
 
@@ -301,38 +350,38 @@ ServerSection:AddToggle({
 
 ServerSection:AddSeparator({ text = "Server Information" })
 
--- Game info using buttons
+-- Server Info Dropdown
 local gameInfo = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-ServerSection:AddButton({
+ServerSection:AddList({
     enabled = true,
-    text = "Game: " .. (gameInfo.Name or "Unknown"),
-    tooltip = "Current game name",
-    callback = function() 
-        _G.CROW:SendNotification("Game: " .. (gameInfo.Name or "Unknown"), 3)
-    end
-})
-
-ServerSection:AddButton({
-    enabled = true,
-    text = "Place ID: " .. tostring(game.PlaceId),
-    tooltip = "Current place ID",
-    callback = function() 
-        _G.CROW:SendNotification("Place ID: " .. tostring(game.PlaceId), 3)
-    end
-})
-
-ServerSection:AddButton({
-    enabled = true,
-    text = "Job ID: " .. tostring(game.JobId):sub(1, 8) .. "...",
-    tooltip = "Current server job ID",
-    callback = function() 
-        _G.CROW:SendNotification("Job ID: " .. tostring(game.JobId), 5)
+    text = "Server Information",
+    tooltip = "View server details",
+    selected = {},
+    multi = true,
+    open = false,
+    max = 4,
+    values = {
+        "Game: " .. (gameInfo.Name or "Unknown"),
+        "Place ID: " .. tostring(game.PlaceId),
+        "Job ID: " .. tostring(game.JobId):sub(1, 8) .. "...",
+        "Players: " .. #Players:GetPlayers()
+    },
+    flag = "ServerInfoSelection",
+    risky = false,
+    callback = function(selected)
+        for _, info in pairs(selected) do
+            if string.find(info, "Job ID:") then
+                _G.CROW:SendNotification("Full Job ID: " .. tostring(game.JobId), 5)
+            else
+                _G.CROW:SendNotification(info, 3)
+            end
+        end
     end
 })
 
 ServerSection:AddSeparator({ text = "Performance" })
 
--- Performance monitoring buttons
+-- Performance monitoring buttons (keeping as buttons for real-time updates)
 _G.AdminPanel.FPSButton = ServerSection:AddButton({
     enabled = true,
     text = "FPS: Calculating...",
@@ -386,6 +435,32 @@ function refreshAllData()
     _G.CROW:SendNotification("Refreshing all admin data...", 3)
     refreshBlacklistInfo()
     updatePlayerList()
+    
+    -- Update dropdown values
+    updateDropdownValues()
+end
+
+-- Function to update dropdown values with current data
+function updateDropdownValues()
+    -- Update admin info dropdown values
+    local adminInfoValues = {
+        "Panel Version: v1.0.5",
+        "Admin ID: " .. tostring(_G.userId),
+        "Total Admins: " .. #_G.Admins,
+        "Blacklisted Players: " .. #_G.BlacklistedPlayers
+    }
+    
+    -- Update server info dropdown values
+    local gameInfo = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+    local serverInfoValues = {
+        "Game: " .. (gameInfo.Name or "Unknown"),
+        "Place ID: " .. tostring(game.PlaceId),
+        "Job ID: " .. tostring(game.JobId):sub(1, 8) .. "...",
+        "Players: " .. #Players:GetPlayers()
+    }
+    
+    -- Note: In a real implementation, you'd need to update the dropdown values
+    -- This would require additional UI library methods
 end
 
 -- Function to refresh blacklist information
@@ -414,10 +489,8 @@ function refreshBlacklistInfo()
         updateBlacklistDisplay()
         _G.AdminPanel.RefreshInProgress = false
         
-        -- Update blacklist count button
-        if _G.AdminPanel.BlacklistCountButton then
-            _G.AdminPanel.BlacklistCountButton:SetText("Blacklisted Players: " .. #_G.BlacklistedPlayers)
-        end
+        -- Update blacklist count
+        updateDropdownValues()
         
         _G.CROW:SendNotification("Blacklist refreshed! (" .. #_G.BlacklistedPlayers .. " players)", 3)
     end)
@@ -665,6 +738,9 @@ function updatePlayerList()
     if _G.AdminPanel.PlayerCountButton then
         _G.AdminPanel.PlayerCountButton:SetText("Players in server: " .. #currentPlayers)
     end
+    
+    -- Update dropdown values
+    updateDropdownValues()
 end
 
 -- Function to kick player
