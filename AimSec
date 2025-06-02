@@ -617,7 +617,7 @@ local create = coroutine.create
 -- Performance optimization: Cache mouse position
 local CachedMousePosition = Vector2.new(0, 0)
 local LastMouseUpdate = 0
-local MOUSE_UPDATE_INTERVAL = 0
+local MOUSE_UPDATE_INTERVAL = 0.00833
 
 -- Performance optimization: Cache closest player
 local CachedClosestPlayer = nil
