@@ -617,12 +617,12 @@ local create = coroutine.create
 -- Performance optimization: Cache mouse position
 local CachedMousePosition = Vector2.new(0, 0)
 local LastMouseUpdate = 0
-local MOUSE_UPDATE_INTERVAL = 0.0001 -- ~60 FPS
+local MOUSE_UPDATE_INTERVAL = 0
 
 -- Performance optimization: Cache closest player
 local CachedClosestPlayer = nil
 local LastPlayerUpdate = 0
-local PLAYER_UPDATE_INTERVAL = 0.033 -- ~30 FPS
+local PLAYER_UPDATE_INTERVAL = 0.00833 -- ~120 FPS
 
 -- Drawing Objects
 local fov_circle = Drawing.new("Circle")
@@ -963,6 +963,7 @@ SilentAimSection:AddSlider({
     flag = "SilentAutoShootCooldown"
 })
 
+
 SilentAimSection:AddSeparator({ text = "Prediction" })
 
 SilentAimSection:AddList({
@@ -1015,7 +1016,7 @@ local LastSilentShotTime = 0
 
 -- Optimized Render Loop with reduced frequency
 local lastRenderTime = 0
-local RENDER_INTERVAL = 0.016 -- ~60 FPS cap
+local RENDER_INTERVAL = 0.00833 -- ~120 FPS cap
 
 resume(create(function()
     RenderStepped:Connect(function()
