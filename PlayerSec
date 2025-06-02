@@ -17,14 +17,7 @@ local Config = {
     partsCacheInterval = 0.5, -- Cache refresh interval
     rainbowUpdateInterval = 1/60, -- Rainbow effect update rate
     
-    -- Fullbright settings
-    fullbrightSettings = {
-        brightness = 2,
-        clockTime = 14,
-        fogEnd = 100000,
-        globalShadows = false,
-        ambient = Color3.fromRGB(178, 178, 178)
-    },
+
     
     -- Character customization settings
     characterEffects = {
@@ -158,7 +151,6 @@ local states = {
     jumpEnabled = false,
     fovEnabled = false,
     --noclipEnabled = false,
-    fullbrightEnabled = false
 }
 
 -- Movement State Tracking
@@ -196,7 +188,7 @@ local function cleanupConnections(connectionType)
 end
 
 -- Forward declarations for toggle functions
-local toggleSpeed, toggleJump, toggleFOV, toggleFullBright--, toggleNoclip
+local toggleSpeed, toggleJump, toggleFOV--, toggleNoclip
 
 -- Character Setup (called when character spawns or respawns)
 local function setupCharacter(char)
@@ -475,17 +467,6 @@ local function enforceProperties()
             humanoid.WalkSpeed = speedValue
         end
     end
-    
-    -- FullBright enforcement (reduced frequency)
-    if states.fullbrightEnabled then
-        if Lighting.Brightness ~= Config.fullbrightSettings.brightness then Lighting.Brightness = Config.fullbrightSettings.brightness end
-        if Lighting.ClockTime ~= Config.fullbrightSettings.clockTime then Lighting.ClockTime = Config.fullbrightSettings.clockTime end
-        if Lighting.FogEnd ~= Config.fullbrightSettings.fogEnd then Lighting.FogEnd = Config.fullbrightSettings.fogEnd end
-        if Lighting.GlobalShadows ~= Config.fullbrightSettings.globalShadows then Lighting.GlobalShadows = Config.fullbrightSettings.globalShadows end
-        if Lighting.Ambient ~= Config.fullbrightSettings.ambient then
-            Lighting.Ambient = Config.fullbrightSettings.ambient
-        end
-    end
 end
 
 -- Movement Controls
@@ -548,41 +529,6 @@ end
 --     end
 -- end
 
-toggleFullBright = function(state)
-    states.fullbrightEnabled = state
-    
-    cleanupConnections("fullbright")
-    
-    if state then
-        -- Store current lighting values before changing
-        originalLighting = {
-            brightness = Lighting.Brightness,
-            ambient = Lighting.Ambient,
-            colorShift = Lighting.ColorShift_Top,
-            fog = Lighting.FogEnd,
-            shadowSoftness = Lighting.ShadowSoftness,
-            time = Lighting.TimeOfDay,
-            globalShadows = Lighting.GlobalShadows,
-            clockTime = Lighting.ClockTime
-        }
-        
-        Lighting.Brightness = Config.fullbrightSettings.brightness
-        Lighting.ClockTime = Config.fullbrightSettings.clockTime
-        Lighting.FogEnd = Config.fullbrightSettings.fogEnd
-        Lighting.GlobalShadows = Config.fullbrightSettings.globalShadows
-        Lighting.Ambient = Config.fullbrightSettings.ambient
-    else
-        -- Restore all original lighting values
-        pcall(function() Lighting.Brightness = originalLighting.brightness end)
-        pcall(function() Lighting.Ambient = originalLighting.ambient end)
-        pcall(function() Lighting.ColorShift_Top = originalLighting.colorShift end)
-        pcall(function() Lighting.FogEnd = originalLighting.fog end)
-        pcall(function() Lighting.ShadowSoftness = originalLighting.shadowSoftness end)
-        pcall(function() Lighting.TimeOfDay = originalLighting.time end)
-        pcall(function() Lighting.GlobalShadows = originalLighting.globalShadows end)
-        pcall(function() Lighting.ClockTime = originalLighting.clockTime end)
-    end
-end
 
 local function updateMovementMethod(method)
     cleanupMovementMethod(currentMovementMethod)
@@ -619,10 +565,6 @@ local function cleanupStats()
     
     if camera then
         camera.FieldOfView = originalValues.fov
-    end
-    
-    if states.fullbrightEnabled then
-        toggleFullBright(false)
     end
     
     -- if states.noclipEnabled then
@@ -774,23 +716,7 @@ secplayer:AddToggle({
     end
 })
 
-secplayer:AddToggle({
-    text = "FullBright",
-    state = false,
-    tooltip = "Toggle full brightness lighting",
-    flag = "Toggle_FullBright",
-    callback = function(state)
-        toggleFullBright(state)
-    end
-}):AddBind({
-    text = "FullBright Key",
-    tooltip = "Hotkey to toggle full brightness",
-    mode = "toggle",
-    bind = "None",
-    callback = function(v)
-        toggleFullBright(v)
-    end
-})
+
 
 -- Character Customization Section
 local seccharacter = _G.PlayerTab:AddSection("Character Customization", 2)
