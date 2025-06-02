@@ -1,4 +1,4 @@
 _G.BlacklistedPlayers = {
-
-    -- more user IDs
+    8288527200,
+    2342342342
 }
