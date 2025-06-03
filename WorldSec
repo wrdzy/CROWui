@@ -1,4 +1,4 @@
--- Services
+    -- Services
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 -- World Variables
@@ -172,6 +172,7 @@ local function createSections()
         success = false
         errorMsg = errorMsg .. "VisualSection: " .. tostring(sectionError) .. " | "
     end
+    
     
     return success, errorMsg
 end
@@ -406,6 +407,24 @@ ColorSection:AddColor({
     end
 })
 
+
+
+-- =====================TIME OF DAY =====================
+VisualSection:AddSeparator({ text = "Time of Day" })
+VisualSection:AddSlider({
+    enabled = true,
+    text = "Time of Day",
+    tooltip = "Change time of day",
+    flag = "TimeOfDay",
+    suffix = ":00",
+    min = 0,
+    max = 24,
+    increment = 0.5,
+    risky = false,
+    callback = function(value)
+        Lighting.ClockTime = value
+    end
+})
 -- ===================== VISUAL EFFECTS =====================
 VisualSection:AddSeparator({ text = "Screen Effects" })
 
@@ -622,39 +641,224 @@ VisualSection:AddSlider({
     end
 })
 
--- ===================== UTILITIES =====================
-UtilitySection:AddSeparator({ text = "Display Effects" })
 
-UtilitySection:AddToggle({
-    text = "Horizontal Stretch",
-    state = false,
-    flag = "HorizontalStretch",
-    tooltip = "Stretch the view horizontally",
-    callback = function(state)
-        if state then
-            applyHorizontalStretch(1.5) -- Default stretch intensity
+
+
+UtilitySection:AddSeparator({ text = "Utility Functions" })
+
+local Lighting = game:GetService("Lighting")
+
+local defaultSkybox = Lighting:FindFirstChildOfClass("Sky") and {
+    SkyboxBk = Lighting:FindFirstChildOfClass("Sky").SkyboxBk,
+    SkyboxDn = Lighting:FindFirstChildOfClass("Sky").SkyboxDn,
+    SkyboxFt = Lighting:FindFirstChildOfClass("Sky").SkyboxFt,
+    SkyboxLf = Lighting:FindFirstChildOfClass("Sky").SkyboxLf,
+    SkyboxRt = Lighting:FindFirstChildOfClass("Sky").SkyboxRt,
+    SkyboxUp = Lighting:FindFirstChildOfClass("Sky").SkyboxUp
+}
+
+local lastSkyboxData = nil
+local customSkyboxEnabled = false
+
+local skyboxes = {
+    ["Red Storm"] = "159454299",
+    ["Starry Night"] = "983765098",
+    ["Sunny Sky"] = "121949310",
+    ["Fog on the Water"] = {
+        SkyboxBk = "15876597103",
+        SkyboxDn = "15876592775",
+        SkyboxFt = "15876640231",
+        SkyboxLf = "15876638420",
+        SkyboxRt = "15876595486",
+        SkyboxUp = "15876639348"
+    },
+    ["Sunset"] = {
+        SkyboxBk = "600830446",
+        SkyboxDn = "600831635",
+        SkyboxFt = "600832720",
+        SkyboxLf = "600886090",
+        SkyboxRt = "600833862",
+        SkyboxUp = "600835177"
+    }
+}
+
+local function notify(message, duration)
+    if _G.CROW and _G.CROW.SendNotification then
+        _G.CROW:SendNotification(message, duration or 4)
+    else
+        warn("[Skybox Script] " .. message)
+    end
+end
+
+local function isValidAssetId(id)
+    return id and id:match("^%d+$")
+end
+
+local function parseTextureIds(input)
+    local ids = {}
+    for id in input:gmatch("%d+") do
+        table.insert(ids, id)
+    end
+    if #ids == 6 then
+        return {
+            SkyboxBk = ids[1],
+            SkyboxDn = ids[2],
+            SkyboxFt = ids[3],
+            SkyboxLf = ids[4],
+            SkyboxRt = ids[5],
+            SkyboxUp = ids[6]
+        }
+    end
+    return nil
+end
+
+local function applySkybox(skyboxData)
+    local textures = skyboxData
+    if type(skyboxData) == "string" then
+        if not isValidAssetId(skyboxData) then
+            notify("Invalid skybox ID: Must be numeric", 4)
+            return
+        end
+        textures = {
+            SkyboxBk = skyboxData,
+            SkyboxDn = skyboxData,
+            SkyboxFt = skyboxData,
+            SkyboxLf = skyboxData,
+            SkyboxRt = skyboxData,
+            SkyboxUp = skyboxData
+        }
+    elseif type(skyboxData) ~= "table" then
+        notify("Invalid skybox data: Must be string or table", 4)
+        return
+    end
+
+    for face, id in pairs(textures) do
+        if not isValidAssetId(id) then
+            notify("Invalid texture ID for " .. face .. ": " .. tostring(id), 4)
+            return
+        end
+    end
+
+    for _, child in pairs(Lighting:GetChildren()) do
+        if child:IsA("Sky") then
+            child:Destroy()
+        end
+    end
+
+    local success, err = pcall(function()
+        local sky = Instance.new("Sky")
+        sky.SkyboxBk = "rbxassetid://" .. textures.SkyboxBk
+        sky.SkyboxDn = "rbxassetid://" .. textures.SkyboxDn
+        sky.SkyboxFt = "rbxassetid://" .. textures.SkyboxFt
+        sky.SkyboxLf = "rbxassetid://" .. textures.SkyboxLf
+        sky.SkyboxRt = "rbxassetid://" .. textures.SkyboxRt
+        sky.SkyboxUp = "rbxassetid://" .. textures.SkyboxUp
+        sky.Parent = Lighting
+    end)
+
+    if not success then
+        notify("Failed to apply skybox: " .. tostring(err), 6)
+    end
+end
+
+local function restoreDefaultSkybox()
+    for _, child in pairs(Lighting:GetChildren()) do
+        if child:IsA("Sky") then
+            child:Destroy()
+        end
+    end
+    if defaultSkybox then
+        local success, err = pcall(function()
+            local sky = Instance.new("Sky")
+            sky.SkyboxBk = defaultSkybox.SkyboxBk
+            sky.SkyboxDn = defaultSkybox.SkyboxDn
+            sky.SkyboxFt = defaultSkybox.SkyboxFt
+            sky.SkyboxLf = defaultSkybox.SkyboxLf
+            sky.SkyboxRt = defaultSkybox.SkyboxRt
+            sky.SkyboxUp = defaultSkybox.SkyboxUp
+            sky.Parent = Lighting
+        end)
+        if success then
+            notify("Default skybox restored!", 4)
         else
-            disableHorizontalStretch()
+            notify("Failed to restore default skybox: " .. tostring(err), 6)
+        end
+    else
+        notify("No default skybox found!", 4)
+    end
+end
+
+UtilitySection:AddList({
+    enabled = true,
+    text = "Skybox Selector",
+    tooltip = "Choose a predefined skybox",
+    selected = "",
+    multi = false,
+    open = false,
+    max = 5,
+    values = { "Red Storm", "Starry Night", "Sunny Sky", "Fog on the Water", "Sunset" },
+    risky = false,
+    callback = function(v)
+        local skyboxData = skyboxes[v]
+        if skyboxData then
+            lastSkyboxData = skyboxData
+            if customSkyboxEnabled then
+                applySkybox(lastSkyboxData)
+            end
+        else
+            notify("No skybox data found for selection: " .. v, 4)
         end
     end
 })
 
-UtilitySection:AddSlider({
+UtilitySection:AddBox({
     enabled = true,
-    text = "Stretch Intensity",
-    tooltip = "How much to stretch horizontally",
-    flag = "StretchIntensity",
-    suffix = "x",
-    min = 1,
-    max = 3,
-    increment = 0.1,
+    text = "Custom Skybox ID(s)",
+    name = "SkyBoxTextBox",
+    flag = "SkyBoxTextBox_1",
+    focused = false,
     risky = false,
-    callback = function(value)
-        applyHorizontalStretch(value)
+    callback = function(v)
+        if v and v ~= "" then
+            local textureIds = parseTextureIds(v)
+            if textureIds then
+                lastSkyboxData = textureIds
+            else
+                local id = v:match("(%d+)$") or v
+                if isValidAssetId(id) then
+                    lastSkyboxData = id
+                else
+                    notify("Invalid input: Enter one ID or six comma-separated IDs", 4)
+                    return
+                end
+            end
+            if customSkyboxEnabled then
+                applySkybox(lastSkyboxData)
+            end
+        end
     end
 })
 
-UtilitySection:AddSeparator({ text = "Utility Functions" })
+UtilitySection:AddToggle({
+    text = "Custom Skybox",
+    state = false,
+    flag = "CustomSkybox",
+    callback = function(state)
+        customSkyboxEnabled = state
+        if state then
+            if lastSkyboxData then
+                applySkybox(lastSkyboxData)
+            else
+                notify("No skybox ID(s) selected!", 4)
+            end
+        else
+            restoreDefaultSkybox()
+        end
+    end
+})
+
+
+
 
 UtilitySection:AddButton({
     enabled = true,
@@ -717,20 +921,7 @@ UtilitySection:AddButton({
     end
 })
 
-UtilitySection:AddSlider({
-    enabled = true,
-    text = "Time of Day",
-    tooltip = "Change time of day",
-    flag = "TimeOfDay",
-    suffix = ":00",
-    min = 0,
-    max = 24,
-    increment = 0.5,
-    risky = false,
-    callback = function(value)
-        Lighting.ClockTime = value
-    end
-})
+
 
 -- Cleanup function
 _G.World.Cleanup = function()
