@@ -5059,12 +5059,13 @@ end
 
     self.keyIndicator = self.NewIndicator({title = 'Keybinds', pos = newUDim2(0,15,0,325), enabled = true});
     
-    self.targetIndicator = self.NewIndicator({title = 'Target Info', pos = newUDim2(0,75,0,350), enabled = true});
+    self.targetIndicator = self.NewIndicator({title = 'Target Info', pos = newUDim2(0,75,0,350), enabled = false});
     self.targetName = self.targetIndicator:AddValue({key = 'Name     :', value = 'nil'})
     self.targetDisplay = self.targetIndicator:AddValue({key = 'DName    :', value = 'nil'})
     self.targetHealth = self.targetIndicator:AddValue({key = 'Health   :', value = '0'})
     self.targetDistance = self.targetIndicator:AddValue({key = 'Distance :', value = '0m'})
     self.targetTool = self.targetIndicator:AddValue({key = 'Weapon   :', value = 'nil'})
+    self.targetTool = self.targetIndicator:AddValue({key = 'Target   :', value = 'nil'})
 
     self:SetTheme(library.theme);
     self:SetOpen(true);
@@ -5143,6 +5144,37 @@ function library:CreateSettingsTab(menu)
         game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId);
     end})
 
+    mainSection:AddButton({text = 'Server Hop', confirm = true, callback = function()
+    local TeleportService = game:GetService("TeleportService")
+    local HttpService = game:GetService("HttpService")
+
+        local function serverHop()
+            local success, servers = pcall(function()
+                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+            end)
+            
+            if success and servers.data then
+                local availableServers = {}
+                
+                for _, server in pairs(servers.data) do
+                    if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                        table.insert(availableServers, server.id)
+                    end
+                end
+                
+                if #availableServers > 0 then
+                    local randomServer = availableServers[math.random(1, #availableServers)]
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer)
+                else
+                    TeleportService:Teleport(game.PlaceId)
+                end
+            else
+                TeleportService:Teleport(game.PlaceId)
+            end
+        end
+        serverHop()
+    end})
+
     mainSection:AddButton({text = 'Rejoin Game', confirm = true, callback = function()
         game:GetService("TeleportService"):Teleport(game.PlaceId);
     end})
@@ -5176,7 +5208,9 @@ function library:CreateSettingsTab(menu)
     mainSection:AddSlider({text = 'Position Y', flag = 'keybind_indicator_y', min = 0, max = 100, increment = .1, value = 30, callback = function()
         library.keyIndicator:SetPosition(newUDim2(library.flags.keybind_indicator_x / 100, 0, library.flags.keybind_indicator_y / 100, 0));    
     end});
-    mainSection:AddToggle({text = 'Target Indicator', flag = 'target_indicator', state = true, callback = function(bool)
+
+
+    mainSection:AddToggle({text = 'Target Indicator', flag = 'target_indicator', state = false, callback = function(bool)
         library.targetIndicator:SetEnabled(bool);
     end})
     mainSection:AddSlider({text = 'Position X', flag = 'target_indicator_x', min = 0, max = 100, increment = .1, value = .5, callback = function()
